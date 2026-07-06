@@ -7,7 +7,7 @@ export const HERBS = {
     name: "菊花",
     nature: "甘、微寒",
     effect: "清肝明目",
-    hue: 48, sat: 65, light: 78, tintWeight: 1, // 浅金黄
+    hue: 46, sat: 68, light: 76, tintWeight: 1, // 蜜色
     floats: true,
   },
   goji: {
@@ -15,7 +15,7 @@ export const HERBS = {
     name: "枸杞",
     nature: "甘、平",
     effect: "滋补肝肾",
-    hue: 18, sat: 70, light: 55, tintWeight: 1.3, // 暖橙红，染色力较强
+    hue: 18, sat: 68, light: 60, tintWeight: 1.3, // 暖橙红（果脯色），染色力较强
     floats: false,
   },
   mint: {
@@ -23,7 +23,7 @@ export const HERBS = {
     name: "薄荷",
     nature: "辛、凉",
     effect: "疏风清咽",
-    hue: 150, sat: 30, light: 82, tintWeight: 0.5, // 极浅青绿，染色力弱
+    hue: 145, sat: 32, light: 82, tintWeight: 0.5, // 极浅青绿，染色力弱
     floats: "half",
   },
   rose: {
@@ -31,7 +31,7 @@ export const HERBS = {
     name: "玫瑰",
     nature: "甘微苦、温",
     effect: "疏肝解郁",
-    hue: 330, sat: 45, light: 82, tintWeight: 0.9, // 浅粉紫
+    hue: 338, sat: 48, light: 80, tintWeight: 0.9, // 桃汤粉
     floats: true,
   },
   licorice: {
@@ -39,7 +39,7 @@ export const HERBS = {
     name: "甘草",
     nature: "甘、平",
     effect: "调和诸药",
-    hue: 42, sat: 55, light: 60, tintWeight: 0.8, // 蜜黄
+    hue: 44, sat: 58, light: 64, tintWeight: 0.8, // 糖色
     floats: false,
   },
 };
@@ -134,8 +134,8 @@ export function mixColor(herbIds, steepProgress = 1) {
   // 浸泡越久，颜色越深越浓（明度下降，饱和度上升），从清水趋向目标色
   const startL = 92, startS = 8;
   const s = startS + (avgSat - startS) * p;
-  const l = startL + (avgLight - 15 - startL) * p; // 略压暗，避免太浅
-  return { h: hue, s: Math.max(5, Math.min(90, s)), l: Math.max(20, Math.min(94, l)) };
+  const l = startL + (avgLight - 8 - startL) * p; // 轻压暗即可，保持蜜色/琥珀的透亮
+  return { h: hue, s: Math.max(5, Math.min(90, s)), l: Math.max(38, Math.min(94, l)) };
 }
 
 /**

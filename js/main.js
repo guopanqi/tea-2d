@@ -1,12 +1,12 @@
 // main.js — 启动、resize、指针事件路由、主循环
 //
-// 渲染顺序（三明治约定，见 scene.js / water.js 顶部注释）：
-//   ART.table → ART.tray → 盘中草药 → ART.cupBack
-//   → 杯中草药 → drawCupWater(水体/茶色/水下遮罩) → ART.cupFront
-//   → 热气 → 壶+水流 → 拖拽中的草药 → 茶签(杯右并排)
+// 渲染顺序（正俯视分层，见 scene.js / water.js 顶部注释）：
+//   ART.table → ART.tray → 盘中草药 → ART.cupBack(杯环+空杯底)
+//   → drawCupWater(水色圆+茶色扩散) → 杯中漂浮草药 → drawCupSurfaceFx(涟漪/水珠)
+//   → 水面微光(steam) → ART.cupFront(高光弧) → 壶+注水滴 → 拖拽中的草药 → 茶签 → ART.grain
 import * as scene from "./scene.js";
 import { Herb, createTrayHerbs, drawHerb, updateHerb, hitTestHerb, HERB_HIT_RADIUS } from "./herbs.js";
-import { WaterSystem, drawCupWater, drawPourStream, CUP } from "./water.js";
+import { WaterSystem, drawCupWater, drawCupSurfaceFx, drawPourStream, CUP, cupInnerR } from "./water.js";
 import { SteamSystem } from "./steam.js";
 import { brew, nameTea } from "./brew.js";
 import { TeaLabel } from "./label.js";
@@ -71,9 +71,9 @@ let kettleX = scene.KETTLE_HOME.x;
 let kettleY = scene.KETTLE_HOME.y;
 let kettleTargetX = kettleX;
 let kettleTargetY = kettleY;
-let kettleTilt = 0;
-let kettleTargetTilt = 0;
+let kettleLean = 0; // 注水时的轻微倾侧（俯视示意）
 let kettleDragging = false;
+let pourHold = 0; // 壶在杯上方按住的时长（控制水流由细到稳）
 
 let draggingHerb = null;
 let dragOffsetX = 0, dragOffsetY = 0;
@@ -240,10 +240,7 @@ function startDrag(herb, x, y) {
 }
 
 function endDrag(herb, x, y) {
-  const overCup =
-    Math.abs(x - CUP.x) < CUP.rx + 50 &&
-    y > CUP.y - CUP.height - 90 &&
-    y < CUP.y + 60;
+  const overCup = distTo(x, y, CUP.x, CUP.y) < CUP.r + 40;
   herb.inspectAlpha = 0;
   if (overCup) {
     dropHerbIntoCup(herb);
@@ -263,14 +260,15 @@ function dropHerbIntoCup(trayHerb) {
   newHerb.y = trayHerb.y;
   newHerb.state = "falling";
   newHerb.age = 0;
-  newHerb.fallVy = 40;
+  newHerb.fallT = 0;
+  newHerb.fallFromX = trayHerb.x;
+  newHerb.fallFromY = trayHerb.y;
   newHerb.scale = 1.15;
-  // 落点在杯口范围内随机
+  // 落点在杯内圆里随机（偏内侧）
   const angle = Math.random() * Math.PI * 2;
-  const r = Math.random() * CUP.rx * 0.5;
-  newHerb.relX = Math.cos(angle) * r;
-  newHerb.relY = Math.sin(angle) * CUP.ry * 0.5;
-  newHerb.targetCupY = CUP.y - water.level * CUP.height + newHerb.relY;
+  const r = Math.random() * cupInnerR() * 0.55;
+  newHerb.targetCupX = CUP.x + Math.cos(angle) * r;
+  newHerb.targetCupY = CUP.y + Math.sin(angle) * r;
   cupHerbs.push(newHerb);
   steepDone = false;
   steeping = false;
@@ -337,9 +335,6 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-// 壶的实际绘制位置（含"临近杯口时上提"的防穿模修正）
-let kettleDrawX = kettleX, kettleDrawY = kettleY;
-
 function update(dt) {
   if (resetStep) {
     const done = resetStep(dt);
@@ -360,36 +355,32 @@ function update(dt) {
     draggingHerb.inspectAlpha += (target - draggingHerb.inspectAlpha) * Math.min(1, dt * 5);
   }
 
-  // ---- 杯子让位缓动（出签时左移，签退场时回中）----
+  // ---- 杯子让位缓动（出签时圆心左移，签退场时回中）----
   const shiftTarget = (label.mode === "entering" || label.mode === "shown") ? CUP_SHIFT : 0;
+  const prevCupX = CUP.x;
   cupShift += (shiftTarget - cupShift) * Math.min(1, dt * 2.2); // ~1.4s 到位
   CUP.x = CUP_HOME_X - cupShift;
+  // 杯中草药随圆心平移（漂移速度极慢，跟不上让位动画）
+  const cupDx = CUP.x - prevCupX;
+  if (cupDx !== 0) {
+    for (const h of cupHerbs) {
+      h.x += cupDx;
+      h.targetCupX += cupDx;
+    }
+  }
 
   // ---- 壶跟手弹簧 ----
   kettleX += (kettleTargetX - kettleX) * 0.15;
   kettleY += (kettleTargetY - kettleY) * 0.15;
 
-  // 防穿模：水平方向越靠近杯口，壶被平滑上提，保证壶身低点不插入杯体
-  const cupTopY = CUP.y - CUP.height;
-  const proximity = Math.max(0, 1 - Math.abs(kettleX - CUP.x) / (CUP.rx + 180));
-  const liftedY = Math.min(kettleY, cupTopY - 85);
-  kettleDrawX = kettleX;
-  kettleDrawY = kettleY + (liftedY - kettleY) * proximity;
-
-  // ---- 倾角：由壶（绘制位置）与杯口的相对位置连续决定 ----
-  let desiredTilt = 0;
-  if (kettleDragging) {
-    const overCupAmount = Math.max(0, 1 - Math.abs(CUP.x - kettleDrawX) / 300);
-    // 用户把指针压得越低（原始 kettleY 越深入杯区），倾角越大
-    const pressDown = Math.max(0, (kettleY - (cupTopY - 200)) / 260);
-    desiredTilt = Math.min(1.15, overCupAmount * (0.3 + pressDown * 1.0));
-  }
-  kettleTargetTilt = desiredTilt;
-  kettleTilt += (kettleTargetTilt - kettleTilt) * 0.12;
-
-  // ---- 是否出水：倾角超过阈值 ----
-  const tiltThreshold = 0.28;
-  const pouringNow = kettleDragging && kettleTilt > tiltThreshold && water.level < 0.85;
+  // ---- 出水：俯视下"壶到位即出水"，按住时长控制水量 ----
+  const spoutOverCup = kettleDragging && distTo(kettleX, kettleY, CUP.x, CUP.y) < CUP.r + 50;
+  if (spoutOverCup) pourHold += dt;
+  else pourHold = 0;
+  const pouringNow = spoutOverCup && water.level < 0.85;
+  // 注水时壶轻微倾侧示意
+  const leanTarget = pouringNow ? -0.18 : 0;
+  kettleLean += (leanTarget - kettleLean) * 0.1;
   if (pouringNow && !water.pouring) {
     water.startPour();
     // 出签后再次注水 = 浸泡重新开始：茶签退场，计时清零
@@ -405,9 +396,9 @@ function update(dt) {
     water.stopPour();
   }
   if (pouringNow) {
-    const strength = Math.min(1, (kettleTilt - tiltThreshold) / (1.1 - tiltThreshold));
+    const strength = Math.min(1, pourHold / 0.6); // 水流由细到稳
     water.flowStrength = strength;
-    water.flowThickness = 2.5 + strength * 8;
+    water.flowThickness = 3 + strength * 8;
   } else {
     water.flowThickness *= 0.85;
   }
@@ -417,48 +408,40 @@ function update(dt) {
 
   const herbsInWaterForDiffuse = [];
   for (const h of cupHerbs) {
-    if (h.state === "falling") {
-      const groundY = CUP.y - water.level * CUP.height * 0.3 - 10;
-      if (h.y >= h.targetCupY - 4 || h.y >= groundY) {
-        h.state = "inwater";
-        h.y = h.targetCupY;
-        audio.playSplash();
-        water.addSplash(h.relX, 0);
-        if (navigator.vibrate) navigator.vibrate(15); // 不支持则静默跳过
-      }
-    } else if (h.state === "inwater") {
-      // 水中摆动（水平方向轻微漂）
-      h.x = CUP.x + h.relX + Math.sin(h.wobblePhase) * 4;
-      const topY = CUP.y - water.level * CUP.height;
-      h.y = topY + CUP.ry * 0.3 + h.floatY * (water.level * CUP.height * 0.7);
-    }
     updateHerb(h, dt);
-    if (h.state === "inwater" && water.level > 0.05) {
-      herbsInWaterForDiffuse.push({ relX: (h.x - CUP.x + CUP.rx) / (CUP.rx * 2), relY: 0.5 });
+    if (h.state === "falling" && h.fallT >= 1) {
+      h.state = "inwater";
+      audio.playSplash();
+      water.addSplash(h.x - CUP.x, h.y - CUP.y);
+      if (navigator.vibrate) navigator.vibrate(15); // 不支持则静默跳过
+    }
+    if (h.state === "inwater") {
+      h.driftEnabled = water.level > 0.05; // 有水才漂
+      if (water.level > 0.1) {
+        herbsInWaterForDiffuse.push({ relX: h.x - CUP.x, relY: h.y - CUP.y });
+      }
     }
   }
 
   water._displayColor = brewColorForCurrentState();
   water.update(dt, herbsInWaterForDiffuse);
 
-  // 注水时水流冲击已有草药：轻微扰动
+  // 注水时水流冲击已有草药：漂移被搅快一点 + 落点涟漪
   if (pouringNow) {
     for (const h of cupHerbs) {
       if (h.state === "inwater") {
-        h.wobblePhase += dt * 3;
-        h.floatY += (Math.random() - 0.5) * 0.01;
+        h.driftAngle += (Math.random() - 0.5) * dt * 6;
       }
     }
-    if (Math.random() < 0.3) {
-      water.addRipple((Math.random() - 0.5) * 60, 0);
+    if (Math.random() < 0.25) {
+      const land = pourLandingPoint();
+      water.addRipple(land.x - CUP.x, land.y - CUP.y);
     }
   }
 
-  // ---- 热气 ----
+  // ---- 水面微光/雾纹（俯视下的"热气"）----
   steam.setActive(water.level > 0.08);
-  const steamOriginX = CUP.x;
-  const steamOriginY = CUP.y - water.level * CUP.height - 8;
-  steam.update(dt, steamOriginX, steamOriginY);
+  steam.update(dt, CUP.x, CUP.y);
 
   // ---- 候：浸泡计时 ----
   const hasHerbsInWater = cupHerbs.some((h) => h.state === "inwater");
@@ -482,6 +465,14 @@ function update(dt) {
   }
 
   label.update(dt);
+}
+
+// 注水落点：壶所在方向朝杯心投影，落在杯内圆靠内的一点
+function pourLandingPoint() {
+  const dx = kettleX - CUP.x, dy = kettleY - CUP.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const r = Math.min(len, cupInnerR() * 0.45);
+  return { x: CUP.x + (dx / len) * r, y: CUP.y + (dy / len) * r };
 }
 
 function brewColorForCurrentState() {
@@ -520,29 +511,31 @@ function render() {
     if (h !== draggingHerb) drawHerb(ctx, h);
   }
 
-  // ---- 杯子三明治 ----
-  scene.ART.cupBack(ctx);
+  // ---- 杯口圆分层（俯视）----
+  scene.ART.cupBack(ctx); // 外沿环 + 空杯底
+  drawCupWater(ctx, water); // 水色圆 + 茶色扩散
   for (const h of cupHerbs) {
     if (h.state === "inwater" || h.state === "falling") {
-      drawHerb(ctx, h);
+      drawHerb(ctx, h); // 漂在水面上
     }
   }
-  drawCupWater(ctx, water); // 含水下遮罩：盖在水位以下的草药之上
-  scene.ART.cupFront(ctx);
+  drawCupSurfaceFx(ctx, water); // 涟漪/水珠（水面在草药之上）
+  steam.draw(ctx); // 水面微光/雾纹
+  scene.ART.cupFront(ctx); // 内沿细高光弧
 
-  steam.draw(ctx);
-
-  // 壶（含出水流）
-  const spoutPos = scene.ART.kettle(ctx, kettleDrawX, kettleDrawY, kettleTilt);
+  // 壶（含注水滴）
+  const spoutPos = scene.ART.kettle(ctx, kettleX, kettleY, kettleLean);
   if (water.pouring) {
-    const targetY = CUP.y - water.level * CUP.height;
-    drawPourStream(ctx, spoutPos.x, spoutPos.y, CUP.x, targetY, water.flowThickness);
+    const land = pourLandingPoint();
+    drawPourStream(ctx, spoutPos.x, spoutPos.y, land.x, land.y, water.flowThickness);
   }
 
   // 正在拖拽的草药画在最上层
   if (draggingHerb) drawHerb(ctx, draggingHerb);
 
-  label.draw(ctx); // 茶签与杯并排，画在最上层
+  label.draw(ctx); // 茶签与杯并排
+
+  scene.ART.grain(ctx); // 纸纹颗粒层收尾
 }
 
 requestAnimationFrame(frame);

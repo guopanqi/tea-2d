@@ -1,27 +1,40 @@
-// scene.js — 静物绘制：桌、盘、杯、壶、光
+// scene.js — 静物绘制（正俯视 · 贴纸化）：纸面、颗粒层、浅盘垫、杯口圆、壶
 //
 // ── 美术替换约定（IMPORTANT）────────────────────────────────────────────
 // 所有静物收敛在 ART 注册表中，每个条目是一个独立 draw 函数：
-//   ART.table(ctx)              — 背景+桌面，铺满逻辑画布 1200x800，origin 左上角
-//   ART.tray(ctx)               — 陶盘，锚点 TRAY_CENTER，椭圆 rx=TRAY_RADIUS
-//   ART.cupBack(ctx)            — 玻璃杯"后壁"（阴影+背面轮廓），锚点 CUP(x, y=杯底中心)
-//   ART.cupFront(ctx)           — 玻璃杯"前壁"（高光+杯口），同锚点
-//   ART.kettle(ctx, x, y, tilt) — 陶壶，锚点为壶身中心，tilt 弧度；返回壶嘴世界坐标
+//   ART.table(ctx)            — 米灰纸面背景（含水彩沉淀感），铺满 750x1300，origin 左上
+//   ART.tray(ctx)             — 底部浅盘垫（贴纸化圆角条），锚点 TRAY_CENTER
+//   ART.cupBack(ctx)          — 杯外沿环 + 空杯底色（贴纸化平涂 + 软投影），锚点 CUP 圆心
+//   ART.cupFront(ctx)         — 杯内沿一两条细高光弧（画在水面之上）
+//   ART.kettle(ctx, x, y, lean) — 俯视壶（平涂+软投影），lean 为注水时的轻微倾侧；返回壶嘴世界坐标
+//   ART.grain(ctx)            — 全画面纸纹颗粒层，每帧最后叠加（低透明度）
 // 未来把某个函数体换成 ctx.drawImage(img, ...) 即可换成图片素材——
 // 保持锚点与标注尺寸一致，其余代码无需改动。
-// 杯子严格遵循三明治顺序（由 main.js 编排）：
-//   cupBack → 杯中草药 + 水/茶色(water.js) → cupFront
+// 杯的分层顺序（由 main.js 编排）：cupBack → 水色/扩散(water.js) → 杯中草药
+// → 水面涟漪(water.js) → cupFront → … → grain 收尾。
 // ─────────────────────────────────────────────────────────────────────
 import { TRAY_CENTER, TRAY_RX, TRAY_RY } from "./herbs.js";
-import { CUP } from "./water.js";
+import { CUP, cupInnerR } from "./water.js";
 
 export const LOGICAL_W = 750;
 export const LOGICAL_H = 1300;
 
-export const KETTLE_HOME = { x: 590, y: 235 };
-export const KETTLE_SCALE = 1.5;
+export const KETTLE_HOME = { x: 590, y: 220 };
 
-// 背景 + 桌面（含木纹）只需画一次到离屏缓存，随后每帧直接贴图
+// 调色板（STYLE.md：米灰底 + 低饱和主色 + 食物色只给草药茶汤 + 朱红点缀）
+const PALETTE = {
+  paper: "#e8e2d6",
+  ink: "#4a544c", // 黛青（文字/细线）
+  cupRing: "#d8cfbc", // 杯沿环（低饱和茶褐灰）
+  cupBase: "#ded7c6", // 空杯底
+  mat: "#ddd4bf", // 浅盘垫
+  kettleBody: "#8b8577", // 壶身（往灰里掺的茶褐）
+  kettleDeep: "#767162",
+  accent: "#b03a2e", // 朱红（只做点）
+  shadow: "rgba(90, 80, 60, 0.16)", // 贴纸软投影
+};
+
+// ---- 纸面背景（画一次缓存）----
 let backgroundCache = null;
 
 function buildBackground() {
@@ -30,67 +43,46 @@ function buildBackground() {
   canvas.height = LOGICAL_H;
   const ctx = canvas.getContext("2d");
 
-  // 宣纸底
-  const bgGrad = ctx.createLinearGradient(0, 0, LOGICAL_W, LOGICAL_H);
-  bgGrad.addColorStop(0, "#f7f2e8");
-  bgGrad.addColorStop(1, "#f0e9da");
-  ctx.fillStyle = bgGrad;
+  ctx.fillStyle = PALETTE.paper;
   ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
 
-  // 细噪点
-  const noiseData = ctx.createImageData(LOGICAL_W, LOGICAL_H);
-  for (let i = 0; i < noiseData.data.length; i += 4) {
-    const v = 245 + (Math.random() - 0.5) * 14;
-    noiseData.data[i] = v;
-    noiseData.data[i + 1] = v - 3;
-    noiseData.data[i + 2] = v - 12;
-    noiseData.data[i + 3] = 10;
-  }
-  ctx.putImageData(noiseData, 0, 0);
-
-  // 顶部斜下的窗光
-  const lightGrad = ctx.createRadialGradient(
-    LOGICAL_W * 0.7, -40, 40,
-    LOGICAL_W * 0.7, -40, 900
-  );
-  lightGrad.addColorStop(0, "rgba(255,250,230,0.55)");
-  lightGrad.addColorStop(1, "rgba(255,250,230,0)");
-  ctx.fillStyle = lightGrad;
-  ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
-
-  // 桌面（竖屏：墙面占上约 1/3，桌面为主体）
-  const tableTop = LOGICAL_H * 0.33;
-  const tableGrad = ctx.createLinearGradient(0, tableTop, 0, LOGICAL_H);
-  tableGrad.addColorStop(0, "#9c7f5c");
-  tableGrad.addColorStop(1, "#6e5637");
-  ctx.fillStyle = tableGrad;
-  ctx.fillRect(0, tableTop, LOGICAL_W, LOGICAL_H - tableTop);
-
-  // 木纹曲线
-  ctx.strokeStyle = "rgba(60,42,20,0.14)";
-  ctx.lineWidth = 1.4;
-  for (let i = 0; i < 22; i++) {
-    const y0 = tableTop + 10 + i * 40 + Math.random() * 10;
-    ctx.beginPath();
-    ctx.moveTo(-20, y0);
-    ctx.bezierCurveTo(
-      LOGICAL_W * 0.3, y0 + Math.sin(i) * 14,
-      LOGICAL_W * 0.7, y0 - Math.sin(i * 1.3) * 14,
-      LOGICAL_W + 20, y0
+  // 水彩沉淀感：几团极淡的径向深浅不匀
+  const blobs = [
+    [0.2, 0.15, 360, 0.05], [0.85, 0.3, 300, 0.045],
+    [0.5, 0.55, 420, 0.04], [0.15, 0.8, 320, 0.05],
+    [0.8, 0.9, 360, 0.045],
+  ];
+  for (const [fx, fy, r, a] of blobs) {
+    const g = ctx.createRadialGradient(
+      LOGICAL_W * fx, LOGICAL_H * fy, r * 0.2,
+      LOGICAL_W * fx, LOGICAL_H * fy, r
     );
-    ctx.stroke();
+    g.addColorStop(0, `rgba(160, 148, 120, ${a})`);
+    g.addColorStop(1, "rgba(160, 148, 120, 0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
   }
 
-  // 桌面高光（呼应窗光）
-  const tableLight = ctx.createRadialGradient(
-    LOGICAL_W * 0.65, tableTop + 40, 30,
-    LOGICAL_W * 0.65, tableTop + 40, 520
-  );
-  tableLight.addColorStop(0, "rgba(255,240,200,0.18)");
-  tableLight.addColorStop(1, "rgba(255,240,200,0)");
-  ctx.fillStyle = tableLight;
-  ctx.fillRect(0, tableTop, LOGICAL_W, LOGICAL_H - tableTop);
+  return canvas;
+}
 
+// ---- 纸纹颗粒层（画一次缓存，每帧低透明度叠加）----
+let grainCache = null;
+
+function buildGrain() {
+  const canvas = document.createElement("canvas");
+  canvas.width = LOGICAL_W;
+  canvas.height = LOGICAL_H;
+  const ctx = canvas.getContext("2d");
+  const img = ctx.createImageData(LOGICAL_W, LOGICAL_H);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.random() * 255;
+    img.data[i] = v;
+    img.data[i + 1] = v;
+    img.data[i + 2] = v;
+    img.data[i + 3] = Math.random() < 0.5 ? 14 : 0;
+  }
+  ctx.putImageData(img, 0, 0);
   return canvas;
 }
 
@@ -101,207 +93,165 @@ function drawTable(ctx) {
   ctx.drawImage(backgroundCache, 0, 0);
 }
 
+function drawGrain(ctx) {
+  if (!grainCache) grainCache = buildGrain();
+  ctx.save();
+  ctx.globalAlpha = 0.5; // 颗粒本身已很淡，此处再压
+  ctx.drawImage(grainCache, 0, 0);
+  ctx.restore();
+}
+
+// 底部浅盘垫：贴纸化圆角横条
 function drawTray(ctx) {
   const { x, y } = TRAY_CENTER;
-  const rx = TRAY_RX, ry = TRAY_RY;
+  const w = TRAY_RX * 2, h = TRAY_RY * 2;
   ctx.save();
-  // 盘影
+  // 软投影（小偏移）
+  ctx.fillStyle = PALETTE.shadow;
+  ctx.filter = "blur(6px)";
+  roundRectPath(ctx, x - w / 2 + 4, y - h / 2 + 7, w, h, h / 2);
+  ctx.fill();
+  ctx.filter = "none";
+  // 平涂盘身
+  ctx.fillStyle = PALETTE.mat;
+  roundRectPath(ctx, x - w / 2, y - h / 2, w, h, h / 2);
+  ctx.fill();
+  // 极淡轮廓
+  ctx.strokeStyle = "rgba(120, 108, 80, 0.18)";
+  ctx.lineWidth = 1.5;
+  roundRectPath(ctx, x - w / 2, y - h / 2, w, h, h / 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 杯：外沿环 + 空杯底色（俯视，贴纸化）
+function drawCupBack(ctx) {
+  const { x, y, r } = CUP;
+  const innerR = cupInnerR();
+  ctx.save();
+  // 整杯软投影
   ctx.beginPath();
-  ctx.ellipse(x + 6, y + 14, rx * 1.02, ry * 1.05, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(40,28,14,0.18)";
+  ctx.arc(x + 5, y + 9, r, 0, Math.PI * 2);
+  ctx.fillStyle = PALETTE.shadow;
+  ctx.filter = "blur(10px)";
+  ctx.fill();
+  ctx.filter = "none";
+
+  // 外沿环（平涂圆环）
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.arc(x, y, innerR, 0, Math.PI * 2, true);
+  ctx.fillStyle = PALETTE.cupRing;
+  ctx.fill();
+  // 环的极淡轮廓
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(110, 98, 72, 0.22)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // 空杯底色（注水前可见；注水后被水色圆覆盖）
+  ctx.beginPath();
+  ctx.arc(x, y, innerR, 0, Math.PI * 2);
+  ctx.fillStyle = PALETTE.cupBase;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(110, 98, 72, 0.15)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 杯内沿细高光弧（画在水面之上，贴纸化的"玻璃感"）
+function drawCupFront(ctx) {
+  const { x, y } = CUP;
+  const innerR = cupInnerR();
+  ctx.save();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(x, y, innerR - 6, -2.2, -1.45);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y, innerR - 6, 0.7, 1.15);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 俯视壶：圆壶身 + 壶嘴（朝向左下的圆钝短嘴）+ 侧提把 + 朱红壶钮
+// lean: 注水时轻微倾侧（弧度）。返回壶嘴出水口世界坐标。
+function drawKettle(ctx, kx, ky, lean) {
+  const BODY_R = 62;
+  ctx.save();
+  ctx.translate(kx, ky);
+  ctx.rotate(lean);
+
+  // 软投影
+  ctx.beginPath();
+  ctx.arc(4, 8, BODY_R + 4, 0, Math.PI * 2);
+  ctx.fillStyle = PALETTE.shadow;
   ctx.filter = "blur(8px)";
   ctx.fill();
   ctx.filter = "none";
 
-  // 盘身
-  const grad = ctx.createRadialGradient(x, y - ry * 0.3, 14, x, y, rx);
-  grad.addColorStop(0, "#e9dfc8");
-  grad.addColorStop(1, "#cfc09b");
+  // 壶嘴（朝左下，圆钝小舌）
   ctx.beginPath();
-  ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
-  ctx.fillStyle = grad;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(120,100,60,0.35)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // 内圈
-  ctx.beginPath();
-  ctx.ellipse(x, y, rx * 0.78, ry * 0.78, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = "rgba(120,100,60,0.2)";
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-  ctx.restore();
-}
-
-// 玻璃杯后壁：投影 + 背面玻璃轮廓（画在水和草药之下）
-function drawCupBack(ctx) {
-  const { x, y, rx, ry, height } = CUP;
-  const topY = y - height;
-  const bottomRx = rx * CUP.bottomScale, bottomRy = ry * CUP.bottomScale;
-
-  ctx.save();
-  // 杯影
-  ctx.beginPath();
-  ctx.ellipse(x + 7, y + ry * 0.7 + 10, rx * 1.05, ry * 1.1, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(40,28,14,0.2)";
-  ctx.filter = "blur(9px)";
-  ctx.fill();
-  ctx.filter = "none";
-
-  // 杯壁基底（半透明玻璃体）
-  ctx.beginPath();
-  ctx.moveTo(x - rx, topY);
-  ctx.lineTo(x - bottomRx, y);
-  ctx.ellipse(x, y, bottomRx, bottomRy, 0, Math.PI, 0, true);
-  ctx.lineTo(x + rx, topY);
-  ctx.ellipse(x, topY, rx, ry, 0, 0, Math.PI, true);
+  ctx.moveTo(-BODY_R * 0.62, BODY_R * 0.5);
+  ctx.quadraticCurveTo(-BODY_R * 1.35, BODY_R * 0.82, -BODY_R * 1.28, BODY_R * 1.02);
+  ctx.quadraticCurveTo(-BODY_R * 1.0, BODY_R * 1.06, -BODY_R * 0.42, BODY_R * 0.78);
   ctx.closePath();
-  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillStyle = PALETTE.kettleDeep;
   ctx.fill();
 
-  // 杯口背缘（远侧半椭圆）
+  // 侧提把（右上弧）
   ctx.beginPath();
-  ctx.ellipse(x, topY, rx, ry, 0, Math.PI, Math.PI * 2);
-  ctx.strokeStyle = "rgba(255,255,255,0.35)";
-  ctx.lineWidth = 1.4;
+  ctx.arc(BODY_R * 0.75, -BODY_R * 0.75, BODY_R * 0.62, -0.6, 1.8);
+  ctx.strokeStyle = PALETTE.kettleDeep;
+  ctx.lineWidth = 11;
+  ctx.lineCap = "round";
   ctx.stroke();
 
-  // 杯底椭圆
+  // 壶身（平涂圆）
   ctx.beginPath();
-  ctx.ellipse(x, y, bottomRx, bottomRy, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = "rgba(255,255,255,0.28)";
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-  ctx.restore();
-}
-
-// 玻璃杯前壁：侧壁渐变高光 + 杯口前缘（画在水和草药之上）
-function drawCupFront(ctx) {
-  const { x, y, rx, ry, height } = CUP;
-  const topY = y - height;
-  const bottomRx = rx * CUP.bottomScale, bottomRy = ry * CUP.bottomScale;
-
-  ctx.save();
-  // 前壁玻璃渐变（左右两条竖高光带）
-  ctx.beginPath();
-  ctx.moveTo(x - rx, topY);
-  ctx.lineTo(x - bottomRx, y);
-  ctx.ellipse(x, y, bottomRx, bottomRy, 0, Math.PI, 0, true);
-  ctx.lineTo(x + rx, topY);
-  ctx.ellipse(x, topY, rx, ry, 0, 0, Math.PI, true);
-  ctx.closePath();
-  const glassGrad = ctx.createLinearGradient(x - rx, 0, x + rx, 0);
-  glassGrad.addColorStop(0, "rgba(255,255,255,0.10)");
-  glassGrad.addColorStop(0.12, "rgba(255,255,255,0.3)");
-  glassGrad.addColorStop(0.5, "rgba(255,255,255,0.03)");
-  glassGrad.addColorStop(0.88, "rgba(255,255,255,0.24)");
-  glassGrad.addColorStop(1, "rgba(255,255,255,0.08)");
-  ctx.fillStyle = glassGrad;
+  ctx.arc(0, 0, BODY_R, 0, Math.PI * 2);
+  ctx.fillStyle = PALETTE.kettleBody;
   ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.5)";
+  ctx.strokeStyle = "rgba(70, 62, 48, 0.25)";
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // 杯口前缘（近侧半椭圆，压在一切之上）
+  // 壶盖圆 + 朱红壶钮（全画面唯一的红点缀之一）
   ctx.beginPath();
-  ctx.ellipse(x, topY, rx, ry, 0, 0, Math.PI);
-  ctx.strokeStyle = "rgba(255,255,255,0.6)";
-  ctx.lineWidth = 1.8;
+  ctx.arc(0, 0, BODY_R * 0.62, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(70, 62, 48, 0.2)";
+  ctx.lineWidth = 1.2;
   ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, 9, 0, Math.PI * 2);
+  ctx.fillStyle = PALETTE.accent;
+  ctx.fill();
 
-  // 竖向高光条
-  ctx.beginPath();
-  ctx.moveTo(x - rx * 0.55, topY + 6);
-  ctx.lineTo(x - bottomRx * 0.55, y - 6);
-  ctx.strokeStyle = "rgba(255,255,255,0.35)";
-  ctx.lineWidth = 8;
-  ctx.lineCap = "round";
-  ctx.filter = "blur(3px)";
-  ctx.stroke();
-  ctx.filter = "none";
   ctx.restore();
+
+  // 壶嘴出水口世界坐标（局部 (-BODY_R*1.28, BODY_R*1.02) 经 lean 旋转）
+  const sx = -BODY_R * 1.28, sy = BODY_R * 1.02;
+  const cos = Math.cos(lean), sin = Math.sin(lean);
+  return {
+    x: kx + sx * cos - sy * sin,
+    y: ky + sx * sin + sy * cos,
+  };
 }
 
-// 陶壶（侧提，壶嘴朝杯=朝左），支持倾角；返回壶嘴出水口世界坐标。
-// tiltAngle 为正值表示向杯口方向倾倒（内部做镜像与转向换算）。
-function drawKettle(ctx, kettleX, kettleY, tiltAngle) {
-  const S = KETTLE_SCALE;
-  ctx.save();
-  ctx.translate(kettleX, kettleY);
-  ctx.rotate(-tiltAngle); // 壶嘴朝左，倒水是逆时针
-  ctx.scale(-S, S); // 水平镜像：原始造型壶嘴朝右
-
-  // 壶影（不随倾角旋转；被提起/倾倒时淡出）
-  const shadowAlpha = 0.18 * Math.max(0, 1 - Math.abs(tiltAngle) * 1.2);
-  if (shadowAlpha > 0.01) {
-    ctx.save();
-    ctx.rotate(tiltAngle);
-    ctx.beginPath();
-    ctx.ellipse(4, 46, 40, 12, 0, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(40,28,14,${shadowAlpha})`;
-    ctx.filter = "blur(5px)";
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // 壶身
-  const bodyGrad = ctx.createRadialGradient(-10, -10, 5, 0, 0, 55);
-  bodyGrad.addColorStop(0, "#9a6b4a");
-  bodyGrad.addColorStop(1, "#6b4527");
+function roundRectPath(ctx, x, y, w, h, r) {
   ctx.beginPath();
-  ctx.moveTo(-38, 0);
-  ctx.bezierCurveTo(-42, -30, -25, -48, 0, -50);
-  ctx.bezierCurveTo(25, -48, 42, -30, 38, 0);
-  ctx.bezierCurveTo(42, 22, 20, 36, 0, 36);
-  ctx.bezierCurveTo(-20, 36, -42, 22, -38, 0);
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
-  ctx.fillStyle = bodyGrad;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(50,30,15,0.35)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // 壶盖
-  ctx.beginPath();
-  ctx.ellipse(0, -48, 14, 5, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "#7a5638";
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(0, -54, 4, 0, Math.PI * 2);
-  ctx.fillStyle = "#6b4527";
-  ctx.fill();
-
-  // 壶嘴（朝右指向杯口）
-  ctx.beginPath();
-  ctx.moveTo(36, -10);
-  ctx.bezierCurveTo(58, -14, 70, -8, 76, 4);
-  ctx.bezierCurveTo(72, 6, 62, 4, 50, 2);
-  ctx.bezierCurveTo(46, -4, 40, -8, 36, -10);
-  ctx.closePath();
-  ctx.fillStyle = bodyGrad;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(50,30,15,0.35)";
-  ctx.stroke();
-
-  // 侧提把手
-  ctx.beginPath();
-  ctx.moveTo(-30, -20);
-  ctx.bezierCurveTo(-55, -25, -55, 5, -32, 12);
-  ctx.strokeStyle = "#6b4527";
-  ctx.lineWidth = 6;
-  ctx.lineCap = "round";
-  ctx.stroke();
-
-  ctx.restore();
-
-  // 壶嘴出水口世界坐标：局部 (76,4)，先镜像缩放 (-S,S)，再旋转 -tilt，再平移
-  const mx = -76 * S, my = 4 * S;
-  const cos = Math.cos(-tiltAngle), sin = Math.sin(-tiltAngle);
-  return {
-    x: kettleX + mx * cos - my * sin,
-    y: kettleY + mx * sin + my * cos,
-  };
 }
 
 export const ART = {
@@ -310,7 +260,7 @@ export const ART = {
   cupBack: drawCupBack,
   cupFront: drawCupFront,
   kettle: drawKettle,
+  grain: drawGrain,
 };
 
-// 兼容旧命名的薄包装（main.js 也可直接用 ART.*）
 export const drawBackground = drawTable;

@@ -100,10 +100,10 @@ export class TeaLabel {
 
   _position() {
     const eased = 1 - Math.pow(1 - this.progress, 3);
-    // 落点：杯右侧留出间隙并排（跟随 CUP.x —— 杯子左移让位时签位同步）
-    const targetCx = CUP.x + CUP.rx + CUP_GAP + LABEL_W / 2;
+    // 落点：杯口圆右侧留出间隙并排（跟随 CUP.x —— 圆心左移让位时签位同步）
+    const targetCx = CUP.x + CUP.r + CUP_GAP + LABEL_W / 2;
     const cx = targetCx + (1 - eased) * DRIFT_DIST;
-    const cy = CUP.y - CUP.height / 2 - 40;
+    const cy = CUP.y;
     return { cx, cy, eased };
   }
 

@@ -1,50 +1,42 @@
-// water.js — 水位、水面、涟漪、注水流、扩散场（茶色）
+// water.js — 正俯视：杯口大圆内的水色、涟漪、注水滴、扩散场（茶色晕染）
 //
 // ── 美术替换约定（IMPORTANT）───────────────────────────────────────
-// 杯子的渲染遵循严格的"三明治"顺序（由 main.js 编排）：
-//   1. scene.ART.cupBack(ctx)   — 杯后壁（玻璃底色/背面轮廓）
-//   2. herbs（杯中草药）+ drawCupWater(ctx, ...) — 水体/茶色/水下遮罩
-//   3. scene.ART.cupFront(ctx)  — 杯前壁高光与杯口
-// drawCupWater 本身也是可替换单元：它在杯体裁剪区域内绘制，
-// 未来若改用贴图水体，保持同样的裁剪区域和绘制时机即可。
+// 杯子的渲染遵循严格分层（由 main.js 编排）：
+//   1. scene.ART.cupBack(ctx)  — 杯外沿环 + 空杯底色（贴纸化平涂）
+//   2. drawCupWater(ctx, w)    — 水色圆（随注水从中心扩张）+ 茶色扩散场
+//   3. （杯中草药，漂在水面上，由 herbs.js 绘制）
+//   4. drawCupSurfaceFx(ctx,w) — 涟漪 / 溅落水珠（画在草药之上，是水面）
+//   5. scene.ART.cupFront(ctx) — 一两条细高光弧
+// 未来换贴图：保持同样分层时机即可。
 // ────────────────────────────────────────────────────────────────
-import { mixColor } from "./brew.js";
 import * as audio from "./audio.js";
 
 export const CUP = {
-  x: 375, // 竖屏居中
-  y: 755, // 杯底（杯口约在画面 40% 高度：755-235=520）
-  rx: 112,
-  ry: 40,
-  height: 235, // 杯体可视高度
-  bottomScale: 0.82, // 杯底半径 = rx * bottomScale（上下收分，玻璃茶杯感）
+  x: 375, // 圆心（出签让位时由 main.js 左移）
+  y: 560, // 画面中心偏上
+  r: 260, // 杯口外半径
+  wall: 26, // 杯壁厚度（外沿环宽）
 };
 
-// 杯壁在某一竖直位置的内半径（yFromBottom: 距杯底的高度 0..height）
-export function cupRadiusAt(yFromBottom) {
-  const t = Math.max(0, Math.min(1, yFromBottom / CUP.height));
-  const bottomRx = CUP.rx * CUP.bottomScale;
-  return bottomRx + (CUP.rx - bottomRx) * t;
+// 杯内可用半径（水面区域）
+export function cupInnerR() {
+  return CUP.r - CUP.wall;
 }
 
-const DIFFUSE_W = 96;
-const DIFFUSE_H = 64;
+const DIFFUSE_N = 96; // 扩散场分辨率（正方形，映射到杯内圆的外接方）
 
 export class WaterSystem {
   constructor() {
-    this.level = 0; // 0..1，占杯高比例
-    this.ripples = []; // {x, y (0..1 rel), radius, life}
-    this.droplets = []; // 溅起水珠 {x,y,vx,vy,life}
+    this.level = 0; // 0..0.85，注水量（俯视下映射为水色圆半径占比）
+    this.ripples = []; // {x, y (相对圆心), radius, life}
+    this.droplets = []; // 溅落水珠 {x, y, vx, vy, life}（相对圆心）
     this.pouring = false;
     this.flowStrength = 0; // 0..1
     this.flowThickness = 0;
-    this.herbColorSources = []; // {relX, relY, hue, sat, light} 用于扩散注入
-    this.diffuseField = new Float32Array(DIFFUSE_W * DIFFUSE_H); // 浓度场 0..1
-    this.diffuseFieldNext = new Float32Array(DIFFUSE_W * DIFFUSE_H);
-    this.diffuseColorField = null; // 混合色相场，简单起见用整体色，不逐格
+    this.diffuseField = new Float32Array(DIFFUSE_N * DIFFUSE_N);
+    this.diffuseFieldNext = new Float32Array(DIFFUSE_N * DIFFUSE_N);
     this.noiseTime = 0;
-    this.baseColor = { h: 45, s: 8, l: 92 };
-    this.targetHerbIds = [];
+    this.baseColor = { h: 45, s: 10, l: 92 };
     this.lastRippleSoundTime = -10;
   }
 
@@ -54,24 +46,27 @@ export class WaterSystem {
     this.droplets = [];
     this.pouring = false;
     this.flowStrength = 0;
-    this.herbColorSources = [];
     this.diffuseField.fill(0);
     this.diffuseFieldNext.fill(0);
-    this.targetHerbIds = [];
+  }
+
+  // 水色圆当前半径（逻辑像素）
+  fillRadius() {
+    return (this.level / 0.85) * cupInnerR();
   }
 
   addRipple(relX, relY) {
-    this.ripples.push({ x: relX, y: relY, radius: 0, life: 1 });
+    this.ripples.push({ x: relX, y: relY, radius: 6, life: 1 });
     if (performance.now() / 1000 - this.lastRippleSoundTime > 0.15) {
       audio.playRipple();
       this.lastRippleSoundTime = performance.now() / 1000;
     }
   }
 
-  addSplash(relX, relY, count = 3) {
+  addSplash(relX, relY, count = 4) {
     for (let i = 0; i < count; i++) {
-      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
-      const speed = 60 + Math.random() * 60;
+      const a = Math.random() * Math.PI * 2;
+      const speed = 40 + Math.random() * 50;
       this.droplets.push({
         x: relX,
         y: relY,
@@ -84,14 +79,14 @@ export class WaterSystem {
     this.addRipple(relX, relY);
   }
 
-  // 在扩散场中某相对位置(0..1,0..1)注入颜色浓度
+  // 在扩散场中某位置注入浓度（rel: 相对圆心的逻辑坐标）
   injectHerbColor(relX, relY, amount = 1) {
-    const gx = Math.floor(relX * DIFFUSE_W);
-    const gy = Math.floor(relY * DIFFUSE_H);
-    const idx = gy * DIFFUSE_W + gx;
-    if (idx >= 0 && idx < this.diffuseField.length) {
-      this.diffuseField[idx] = Math.min(1, this.diffuseField[idx] + amount);
-    }
+    const R = cupInnerR();
+    const gx = Math.floor(((relX + R) / (2 * R)) * DIFFUSE_N);
+    const gy = Math.floor(((relY + R) / (2 * R)) * DIFFUSE_N);
+    if (gx < 0 || gy < 0 || gx >= DIFFUSE_N || gy >= DIFFUSE_N) return;
+    const idx = gy * DIFFUSE_N + gx;
+    this.diffuseField[idx] = Math.min(1, this.diffuseField[idx] + amount);
   }
 
   startPour() {
@@ -105,8 +100,8 @@ export class WaterSystem {
     audio.stopPour();
   }
 
-  update(dt, herbsInWater) {
-    // 水位随注水上升
+  update(dt, herbSources) {
+    // 注水：水色圆扩张（按住时长决定水量）
     if (this.pouring && this.flowStrength > 0 && this.level < 0.85) {
       this.level = Math.min(0.85, this.level + this.flowStrength * dt * 0.12);
     }
@@ -114,142 +109,107 @@ export class WaterSystem {
       audio.updatePour(this.level / 0.85, this.flowStrength);
     }
 
-    // 涟漪衰减扩散
+    // 涟漪扩散衰减
     for (const r of this.ripples) {
-      r.radius += dt * 55;
-      r.life -= dt * 0.9;
+      r.radius += dt * 70;
+      r.life -= dt * 0.8;
     }
     this.ripples = this.ripples.filter((r) => r.life > 0);
 
-    // 水珠物理
+    // 溅落水珠（俯视：向外滑行并消散）
     for (const d of this.droplets) {
-      d.vy += 220 * dt;
-      d.x += d.vx * dt * 0.001;
-      d.y += d.vy * dt * 0.001;
-      d.life -= dt * 1.8;
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+      d.vx *= 0.92;
+      d.vy *= 0.92;
+      d.life -= dt * 2.2;
     }
     this.droplets = this.droplets.filter((d) => d.life > 0);
 
-    // 扩散场：从草药位置注入 + 模糊扩散
-    if (herbsInWater && herbsInWater.length > 0 && this.level > 0.02) {
-      for (const h of herbsInWater) {
-        this.injectHerbColor(h.relX, h.relY, dt * 0.35);
+    // 扩散场：草药处注入 + 模糊扩散
+    if (herbSources && herbSources.length > 0 && this.level > 0.05) {
+      for (const s of herbSources) {
+        this.injectHerbColor(s.relX, s.relY, dt * 0.35);
       }
     }
-    this._diffuse(dt);
+    this._diffuse();
     this.noiseTime += dt;
   }
 
-  _diffuse(dt) {
-    const w = DIFFUSE_W, h = DIFFUSE_H;
+  _diffuse() {
+    const n = DIFFUSE_N;
     const field = this.diffuseField;
     const next = this.diffuseFieldNext;
     const rate = 0.18;
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = y * w + x;
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const idx = y * n + x;
         const c = field[idx];
-        const left = field[y * w + Math.max(0, x - 1)];
-        const right = field[y * w + Math.min(w - 1, x + 1)];
-        const up = field[Math.max(0, y - 1) * w + x];
-        const down = field[Math.min(h - 1, y + 1) * w + x];
-        const avg = (left + right + up + down) / 4;
-        next[idx] = c + (avg - c) * rate;
+        const left = field[y * n + Math.max(0, x - 1)];
+        const right = field[y * n + Math.min(n - 1, x + 1)];
+        const up = field[Math.max(0, y - 1) * n + x];
+        const down = field[Math.min(n - 1, y + 1) * n + x];
+        next[idx] = c + ((left + right + up + down) / 4 - c) * rate;
       }
     }
     this.diffuseField.set(next);
   }
-
-  // 平均浓度（用于判断整体上色程度，非必需）
-  averageConcentration() {
-    let sum = 0;
-    for (let i = 0; i < this.diffuseField.length; i++) sum += this.diffuseField[i];
-    return sum / this.diffuseField.length;
-  }
 }
 
-// ---- 绘制：杯体水面、涟漪、水珠、扩散茶色 ----
+// ══════════════════ 绘制 ══════════════════
 
-// 构造"水体"路径：完整水面椭圆顶弧 + 随杯壁收分的两侧 + 杯底椭圆下弧。
-// 茶色/扩散场/水下遮罩全部 clip 在这个路径内，与杯形严丝合缝。
-function buildWaterBodyPath(ctx, waterLevel) {
-  const { x, y, ry, height } = CUP;
-  const waterTopY = y - waterLevel * height;
-  const surfR = cupRadiusAt(waterLevel * height) * 0.96; // 水面处内半径
-  const botR = cupRadiusAt(0) * 0.96; // 杯底内半径
-  const surfRy = ry * 0.94;
-  const botRy = ry * 0.9;
-
-  ctx.beginPath();
-  // 水面椭圆上半弧（左→右，完整覆盖水面上缘）
-  ctx.ellipse(x, waterTopY, surfR, surfRy, 0, Math.PI, Math.PI * 2, false);
-  // 右侧壁（跟随收分）
-  ctx.lineTo(x + botR, y);
-  // 杯底椭圆下半弧（右→左）
-  ctx.ellipse(x, y, botR, botRy, 0, 0, Math.PI, false);
-  // 左侧壁回到水面
-  ctx.closePath();
-}
-
+// 水色圆 + 茶色扩散（画在杯底之上、草药之下）
 export function drawCupWater(ctx, water) {
-  const { x, y, ry, height } = CUP;
-  if (water.level <= 0.001) return;
-
-  const waterTopY = y - water.level * height;
-  const waterHeightPx = water.level * height;
-  const baseColor = water._displayColor || water.baseColor;
-  const surfR = cupRadiusAt(water.level * height) * 0.96;
-  const surfRy = ry * 0.94;
+  if (water.level <= 0.002) return;
+  const { x, y } = CUP;
+  const fillR = water.fillRadius();
+  const color = water._displayColor || water.baseColor;
 
   ctx.save();
-  buildWaterBodyPath(ctx, water.level);
+  ctx.beginPath();
+  ctx.arc(x, y, fillR, 0, Math.PI * 2);
   ctx.clip();
 
-  // 扩散场绘制（低分辨率放大；覆盖范围含水面椭圆上弧到杯底下弧）
-  drawDiffuseField(
-    ctx, water,
-    x - CUP.rx, waterTopY - surfRy,
-    CUP.rx * 2, waterHeightPx + surfRy + ry
-  );
+  // 水底色（平涂，食物感的浅汤色）
+  ctx.fillStyle = `hsla(${color.h}, ${Math.max(8, color.s - 6)}%, ${Math.min(95, color.l + 8)}%, 0.92)`;
+  ctx.fillRect(x - fillR, y - fillR, fillR * 2, fillR * 2);
 
-  // 水下遮罩：带茶色的半透明层盖在水位以下的一切之上（含杯中草药），
-  // 做出草药"沉在水里"的进深感——越深处遮罩越浓。
-  const maskGrad = ctx.createLinearGradient(0, waterTopY - surfRy, 0, y + ry);
-  maskGrad.addColorStop(0, `hsla(${baseColor.h}, ${baseColor.s}%, ${Math.min(94, baseColor.l + 8)}%, 0.28)`);
-  maskGrad.addColorStop(1, `hsla(${baseColor.h}, ${Math.min(90, baseColor.s + 10)}%, ${Math.max(20, baseColor.l - 12)}%, 0.5)`);
-  ctx.fillStyle = maskGrad;
-  ctx.fillRect(x - CUP.rx, waterTopY - surfRy, CUP.rx * 2, waterHeightPx + surfRy + ry);
+  // 茶色扩散场（低分辨率放大，映射到杯内圆的外接方）
+  const R = cupInnerR();
+  drawDiffuseField(ctx, water, x - R, y - R, R * 2, R * 2);
 
   ctx.restore();
 
-  // 水面：带茶色但更亮的椭圆面 + 反光边
+  // 水缘一圈极淡的深色描边（水彩沉淀感，非立体渐变）
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(x, waterTopY, surfR, surfRy, 0, 0, Math.PI * 2);
-  ctx.fillStyle = `hsla(${baseColor.h}, ${Math.max(8, baseColor.s - 10)}%, ${Math.min(96, baseColor.l + 14)}%, 0.30)`;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.4)";
-  ctx.lineWidth = 1.2;
+  ctx.arc(x, y, fillR, 0, Math.PI * 2);
+  ctx.strokeStyle = `hsla(${color.h}, ${Math.min(80, color.s + 12)}%, ${Math.max(30, color.l - 18)}%, 0.18)`;
+  ctx.lineWidth = 5;
   ctx.stroke();
   ctx.restore();
+}
 
-  // 涟漪
+// 涟漪与溅落水珠（画在漂浮草药之上——它们属于水面）
+export function drawCupSurfaceFx(ctx, water) {
+  const { x, y } = CUP;
   ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, cupInnerR(), 0, Math.PI * 2);
+  ctx.clip();
+
   for (const r of water.ripples) {
     ctx.beginPath();
-    ctx.ellipse(x + r.x, waterTopY + r.y, r.radius, r.radius * 0.35, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(255,255,255,${0.5 * r.life})`;
-    ctx.lineWidth = 1.5 * r.life;
+    ctx.arc(x + r.x, y + r.y, r.radius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,255,255,${0.45 * r.life})`;
+    ctx.lineWidth = 2 * r.life + 0.5;
     ctx.stroke();
   }
-  ctx.restore();
 
-  // 水珠
-  ctx.save();
   for (const d of water.droplets) {
     ctx.beginPath();
-    ctx.arc(x + d.x, waterTopY + d.y, 1.8 * d.life + 0.6, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(210,225,255,${0.8 * d.life})`;
+    ctx.arc(x + d.x, y + d.y, 2 * d.life + 0.6, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${0.6 * d.life})`;
     ctx.fill();
   }
   ctx.restore();
@@ -257,39 +217,38 @@ export function drawCupWater(ctx, water) {
 
 function drawDiffuseField(ctx, water, px, py, pw, ph) {
   const field = water.diffuseField;
-  const w = DIFFUSE_W, h = DIFFUSE_H;
+  const n = DIFFUSE_N;
   const color = water._displayColor || water.baseColor;
-  // 低分辨率离屏绘制再放大（自带柔和感）
   if (!water._offCanvas) {
     water._offCanvas = document.createElement("canvas");
-    water._offCanvas.width = w;
-    water._offCanvas.height = h;
+    water._offCanvas.width = n;
+    water._offCanvas.height = n;
   }
   const off = water._offCanvas;
   const octx = off.getContext("2d");
-  const imgData = octx.createImageData(w, h);
+  const imgData = octx.createImageData(n, n);
   const noiseT = water.noiseTime;
-  for (let yy = 0; yy < h; yy++) {
-    for (let xx = 0; xx < w; xx++) {
-      const idx = yy * w + xx;
+  for (let yy = 0; yy < n; yy++) {
+    for (let xx = 0; xx < n; xx++) {
+      const idx = yy * n + xx;
       let c = field[idx];
-      // 值噪声扰动边缘不规则感
-      const n = Math.sin(xx * 0.3 + noiseT * 0.5) * Math.cos(yy * 0.4 - noiseT * 0.3) * 0.08;
-      c = Math.max(0, Math.min(1, c + n * c));
-      const li = Math.max(15, color.l - c * 45);
-      const sat = Math.min(85, color.s + c * 40);
+      // 值噪声扰动边缘
+      const nz = Math.sin(xx * 0.3 + noiseT * 0.5) * Math.cos(yy * 0.4 - noiseT * 0.3) * 0.08;
+      c = Math.max(0, Math.min(1, c + nz * c));
+      const li = Math.max(35, color.l - c * 32);
+      const sat = Math.min(80, color.s + c * 32);
       const rgb = hslToRgb(color.h, sat, li);
       const pidx = idx * 4;
       imgData.data[pidx] = rgb[0];
       imgData.data[pidx + 1] = rgb[1];
       imgData.data[pidx + 2] = rgb[2];
-      imgData.data[pidx + 3] = Math.min(255, c * 500 + 40);
+      imgData.data[pidx + 3] = Math.min(255, c * 460);
     }
   }
   octx.putImageData(imgData, 0, 0);
   ctx.save();
   ctx.imageSmoothingEnabled = true;
-  ctx.globalAlpha = 0.92;
+  ctx.globalAlpha = 0.9;
   ctx.drawImage(off, px, py, pw, ph);
   ctx.restore();
 }
@@ -317,29 +276,27 @@ function hslToRgb(h, s, l) {
   return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
 }
 
-// 注水流：从壶嘴到水面的贝塞尔弧线
+// 注水：从壶嘴到落点的一串水滴（俯视示意）
 export function drawPourStream(ctx, spoutX, spoutY, targetX, targetY, thickness) {
   if (thickness <= 0.01) return;
-  const midX = (spoutX + targetX) / 2;
-  const midY = spoutY + (targetY - spoutY) * 0.5;
+  const drops = 5;
+  const dx = targetX - spoutX, dy = targetY - spoutY;
+  const len = Math.hypot(dx, dy) || 1;
   ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(spoutX, spoutY);
-  ctx.quadraticCurveTo(midX, midY, targetX, targetY);
-  ctx.strokeStyle = "rgba(210,228,240,0.75)";
-  ctx.lineWidth = Math.max(1, thickness);
-  ctx.lineCap = "round";
-  ctx.stroke();
-  // 内部高光细线
-  ctx.beginPath();
-  ctx.moveTo(spoutX, spoutY);
-  ctx.quadraticCurveTo(midX, midY, targetX, targetY);
-  ctx.strokeStyle = "rgba(255,255,255,0.5)";
-  ctx.lineWidth = Math.max(0.5, thickness * 0.35);
-  ctx.stroke();
+  for (let i = 0; i < drops; i++) {
+    const t = (i + 0.5) / drops;
+    const bow = Math.sin(t * Math.PI) * 8;
+    const px = spoutX + dx * t - (dy / len) * bow * 0.4;
+    const py = spoutY + dy * t + (dx / len) * bow * 0.4;
+    const rr = (0.5 + t * 0.5) * thickness * 0.45;
+    ctx.beginPath();
+    ctx.arc(px, py, rr, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(210, 226, 230, ${0.65 - t * 0.12})`;
+    ctx.fill();
+  }
   // 落点扰动
   ctx.beginPath();
-  ctx.arc(targetX, targetY, thickness * 0.9, 0, Math.PI * 2);
+  ctx.arc(targetX, targetY, thickness * 0.8, 0, Math.PI * 2);
   ctx.fillStyle = "rgba(255,255,255,0.5)";
   ctx.fill();
   ctx.restore();
