@@ -3,7 +3,7 @@
 // 渲染顺序（三明治约定，见 scene.js / water.js 顶部注释）：
 //   ART.table → ART.tray → 盘中草药 → ART.cupBack
 //   → 杯中草药 → drawCupWater(水体/茶色/水下遮罩) → ART.cupFront
-//   → 热气 → 壶+水流 → 拖拽中的草药 → 茶签
+//   → 热气 → 壶+水流 → 拖拽中的草药 → 茶签(杯右并排)
 import * as scene from "./scene.js";
 import { Herb, createTrayHerbs, drawHerb, updateHerb, hitTestHerb, HERB_HIT_RADIUS } from "./herbs.js";
 import { WaterSystem, drawCupWater, drawPourStream, CUP } from "./water.js";
@@ -28,19 +28,37 @@ function resize() {
   const dpr = window.devicePixelRatio || 1;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+  if (!vw || !vh) return; // 隐藏/未布局时跳过，避免 0 尺寸产生 NaN
+  // fitScale 按 CSS 尺寸对逻辑画布 750×1300 计算
   scaleFactor = Math.min(vw / LOGICAL_W, vh / LOGICAL_H);
   const cssW = LOGICAL_W * scaleFactor;
   const cssH = LOGICAL_H * scaleFactor;
-  canvas.style.width = cssW + "px";
-  canvas.style.height = cssH + "px";
-  canvas.width = cssW * dpr;
-  canvas.height = cssH * dpr;
-  ctx.setTransform(dpr * scaleFactor, 0, 0, dpr * scaleFactor, 0, 0);
   offsetX = (vw - cssW) / 2;
   offsetY = (vh - cssH) / 2;
+  // canvas 铺满整个视口；backing store = CSS 尺寸 × dpr；
+  // 绘制变换一次性带上 fitScale×dpr 与居中偏移 ×dpr（Retina/手机 dpr=2 时内容才能铺满）。
+  canvas.style.width = vw + "px";
+  canvas.style.height = vh + "px";
+  canvas.width = Math.round(vw * dpr);
+  canvas.height = Math.round(vh * dpr);
+  ctx.setTransform(scaleFactor * dpr, 0, 0, scaleFactor * dpr, offsetX * dpr, offsetY * dpr);
 }
 window.addEventListener("resize", resize);
 resize();
+
+// dpr 变化（外接屏拖动/浏览器缩放）时重建 backing store：
+// matchMedia(resolution) 监听 + 每次 resize 重读 dpr 双保险
+let dprQuery = null;
+function watchDpr() {
+  if (dprQuery) dprQuery.removeEventListener("change", onDprChange);
+  dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  dprQuery.addEventListener("change", onDprChange);
+}
+function onDprChange() {
+  resize();
+  watchDpr();
+}
+watchDpr();
 
 // ---- 状态 ----
 const trayHerbs = createTrayHerbs();
@@ -68,6 +86,11 @@ const STILL_DELAY = 0.4; // 秒：静止多久后介绍浮现
 let dragPointerX = 0, dragPointerY = 0;
 let stillAnchorX = 0, stillAnchorY = 0;
 let stillTime = 0;
+
+// 出签时杯子向左让位（缓动 ≥1s），茶签落在右侧并排
+const CUP_HOME_X = CUP.x;
+const CUP_SHIFT = 95;
+let cupShift = 0;
 
 let steepTimer = 0;
 const FULL_STEEP_SECONDS = 22;
@@ -103,6 +126,9 @@ function ensureAudio() {
     audio.initAudio();
   }
 }
+
+// 触屏兜底：某些浏览器 touchstart 早于 pointerdown 分发
+document.addEventListener("touchstart", ensureAudio, { passive: true });
 
 muteBtn.addEventListener("click", () => {
   ensureAudio();
@@ -251,7 +277,7 @@ function dropHerbIntoCup(trayHerb) {
   steepTimer = 0;
   settleTimer = 0;
   labelShown = false;
-  label.hide();
+  label.exit(); // 重新开始冲泡：茶签向右淡出，杯子随之回中
   resetBtn.classList.remove("visible");
 
   // 原盘中草药飘回原位
@@ -273,7 +299,7 @@ function softReset() {
   const startLevel = water.level;
   const duration = 1.5;
   let t = 0;
-  label.hide();
+  label.exit();
   resetBtn.classList.remove("visible");
 
   function step(dt) {
@@ -334,6 +360,11 @@ function update(dt) {
     draggingHerb.inspectAlpha += (target - draggingHerb.inspectAlpha) * Math.min(1, dt * 5);
   }
 
+  // ---- 杯子让位缓动（出签时左移，签退场时回中）----
+  const shiftTarget = (label.mode === "entering" || label.mode === "shown") ? CUP_SHIFT : 0;
+  cupShift += (shiftTarget - cupShift) * Math.min(1, dt * 2.2); // ~1.4s 到位
+  CUP.x = CUP_HOME_X - cupShift;
+
   // ---- 壶跟手弹簧 ----
   kettleX += (kettleTargetX - kettleX) * 0.15;
   kettleY += (kettleTargetY - kettleY) * 0.15;
@@ -361,6 +392,15 @@ function update(dt) {
   const pouringNow = kettleDragging && kettleTilt > tiltThreshold && water.level < 0.85;
   if (pouringNow && !water.pouring) {
     water.startPour();
+    // 出签后再次注水 = 浸泡重新开始：茶签退场，计时清零
+    if (steepDone) {
+      steepDone = false;
+      labelShown = false;
+      steepTimer = 0;
+      settleTimer = 0;
+      label.exit();
+      resetBtn.classList.remove("visible");
+    }
   } else if (!pouringNow && water.pouring) {
     water.stopPour();
   }
@@ -384,6 +424,7 @@ function update(dt) {
         h.y = h.targetCupY;
         audio.playSplash();
         water.addSplash(h.relX, 0);
+        if (navigator.vibrate) navigator.vibrate(15); // 不支持则静默跳过
       }
     } else if (h.state === "inwater") {
       // 水中摆动（水平方向轻微漂）
@@ -459,14 +500,18 @@ function brewColorForCurrentState() {
 function finishSteep() {
   const herbIds = cupHerbs.map((h) => h.herbId);
   const data = nameTea(herbIds);
-  label.show(data, CUP.x + CUP.rx + 140, CUP.y - CUP.height * 0.5);
+  label.show(data); // 从杯后方升起，位置由 label.js 基于 CUP 计算
   setTimeout(() => {
     resetBtn.classList.add("visible");
   }, 1600);
 }
 
 function render() {
-  ctx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
+  // 清整个 backing store（canvas 铺满视口，留边区域也要清，避免拖拽出界留下残影）
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
   scene.ART.table(ctx);
   scene.ART.tray(ctx);
 
@@ -497,7 +542,7 @@ function render() {
   // 正在拖拽的草药画在最上层
   if (draggingHerb) drawHerb(ctx, draggingHerb);
 
-  label.draw(ctx);
+  label.draw(ctx); // 茶签与杯并排，画在最上层
 }
 
 requestAnimationFrame(frame);

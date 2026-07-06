@@ -9,25 +9,24 @@
 // ─────────────────────────────────────────────────────────────────────
 import { HERBS } from "./brew.js";
 
-// 场景坐标（逻辑坐标 1200x800）
-export const TRAY_CENTER = { x: 250, y: 512 };
-export const TRAY_RADIUS = 190;
+// 场景坐标（逻辑坐标 750x1300，竖屏三段式的下段）
+export const TRAY_CENTER = { x: 375, y: 1105 };
+export const TRAY_RX = 330; // 横向浅盘
+export const TRAY_RY = 62;
 
-// 草药整体美术缩放（相对第一版 ~2.2 倍，让盘中形态可读）
+// 草药整体美术缩放（让盘中形态可读）
 export const HERB_ART_SCALE = 2.2;
-// 命中半径（逻辑像素）
-export const HERB_HIT_RADIUS = 55;
+// 命中半径（逻辑像素，触屏指尖友好）
+export const HERB_HIT_RADIUS = 62;
 
 const HERB_ORDER = ["chrysanthemum", "goji", "mint", "rose", "licorice"];
 
-// 每味在盘中的摆放位置
+// 五味在浅盘中一字排开（间距 130 逻辑像素，拇指可分辨），微微错落
 function trayPositionFor(index, total) {
-  const angle = -Math.PI / 2 + (index / total) * Math.PI * 2 * 0.78 - 0.35;
-  const r = TRAY_RADIUS * 0.62;
-  return {
-    x: TRAY_CENTER.x + Math.cos(angle) * r,
-    y: TRAY_CENTER.y + Math.sin(angle) * r * 0.52,
-  };
+  const spacing = 130;
+  const x = TRAY_CENTER.x + (index - (total - 1) / 2) * spacing;
+  const y = TRAY_CENTER.y - 8 + (index % 2 === 0 ? -8 : 8);
+  return { x, y };
 }
 
 let idCounter = 0;
@@ -250,24 +249,22 @@ export function drawHerb(ctx, herb) {
   }
   ctx.restore();
 
-  // 名字标签（盘中，悬停时浮现；下排草药标签放上方，保证落在盘内侧）
-  if ((herb.state === "tray" || herb.state === "hover") && herb.hoverAmount > 0.02) {
+  // 名字标签（盘中常显极淡小字，触屏无 hover 也可读；悬停/触到时加深）
+  if (herb.state === "tray" || herb.state === "hover") {
     ctx.save();
-    ctx.globalAlpha = herb.hoverAmount * 0.9;
+    ctx.globalAlpha = 0.26 + herb.hoverAmount * 0.55;
     ctx.font = "16px 'Kaiti SC', STKaiti, KaiTi, serif";
     ctx.fillStyle = "#3d4a3e";
     ctx.textAlign = "center";
-    const labelBelow = herb.homeY <= TRAY_CENTER.y;
-    const labelY = labelBelow ? herb.y + 50 : herb.y - 42;
-    ctx.fillText(herb.def.name, herb.x, labelY);
+    ctx.fillText(herb.def.name, herb.x, herb.y + 52);
     ctx.restore();
   }
 
-  // 拖拽中停驻 → 性味介绍在草药旁淡入（竖排两列）
+  // 拖拽中停驻 → 性味介绍在草药旁淡入（竖排两列；靠右边缘时翻到左侧）
   if (herb.state === "dragging" && herb.inspectAlpha > 0.01) {
     ctx.save();
     ctx.globalAlpha = herb.inspectAlpha;
-    const tx = herb.x + 56;
+    const tx = herb.x > 620 ? herb.x - 104 : herb.x + 56;
     const ty = herb.y - 52;
     ctx.font = "17px 'Kaiti SC', STKaiti, KaiTi, serif";
     ctx.fillStyle = "#3d4a3e";

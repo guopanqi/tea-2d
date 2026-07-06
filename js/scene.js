@@ -12,13 +12,13 @@
 // 杯子严格遵循三明治顺序（由 main.js 编排）：
 //   cupBack → 杯中草药 + 水/茶色(water.js) → cupFront
 // ─────────────────────────────────────────────────────────────────────
-import { TRAY_CENTER, TRAY_RADIUS } from "./herbs.js";
+import { TRAY_CENTER, TRAY_RX, TRAY_RY } from "./herbs.js";
 import { CUP } from "./water.js";
 
-export const LOGICAL_W = 1200;
-export const LOGICAL_H = 800;
+export const LOGICAL_W = 750;
+export const LOGICAL_H = 1300;
 
-export const KETTLE_HOME = { x: 975, y: 450 };
+export const KETTLE_HOME = { x: 590, y: 235 };
 export const KETTLE_SCALE = 1.5;
 
 // 背景 + 桌面（含木纹）只需画一次到离屏缓存，随后每帧直接贴图
@@ -48,18 +48,18 @@ function buildBackground() {
   }
   ctx.putImageData(noiseData, 0, 0);
 
-  // 右上窗光
+  // 顶部斜下的窗光
   const lightGrad = ctx.createRadialGradient(
-    LOGICAL_W * 0.85, LOGICAL_H * 0.05, 50,
-    LOGICAL_W * 0.85, LOGICAL_H * 0.05, 750
+    LOGICAL_W * 0.7, -40, 40,
+    LOGICAL_W * 0.7, -40, 900
   );
   lightGrad.addColorStop(0, "rgba(255,250,230,0.55)");
   lightGrad.addColorStop(1, "rgba(255,250,230,0)");
   ctx.fillStyle = lightGrad;
   ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
 
-  // 桌面（上移，占画面主体约 3/4）
-  const tableTop = LOGICAL_H * 0.21;
+  // 桌面（竖屏：墙面占上约 1/3，桌面为主体）
+  const tableTop = LOGICAL_H * 0.33;
   const tableGrad = ctx.createLinearGradient(0, tableTop, 0, LOGICAL_H);
   tableGrad.addColorStop(0, "#9c7f5c");
   tableGrad.addColorStop(1, "#6e5637");
@@ -69,8 +69,8 @@ function buildBackground() {
   // 木纹曲线
   ctx.strokeStyle = "rgba(60,42,20,0.14)";
   ctx.lineWidth = 1.4;
-  for (let i = 0; i < 16; i++) {
-    const y0 = tableTop + 10 + i * 38 + Math.random() * 10;
+  for (let i = 0; i < 22; i++) {
+    const y0 = tableTop + 10 + i * 40 + Math.random() * 10;
     ctx.beginPath();
     ctx.moveTo(-20, y0);
     ctx.bezierCurveTo(
@@ -83,8 +83,8 @@ function buildBackground() {
 
   // 桌面高光（呼应窗光）
   const tableLight = ctx.createRadialGradient(
-    LOGICAL_W * 0.8, tableTop + 40, 30,
-    LOGICAL_W * 0.8, tableTop + 40, 500
+    LOGICAL_W * 0.65, tableTop + 40, 30,
+    LOGICAL_W * 0.65, tableTop + 40, 520
   );
   tableLight.addColorStop(0, "rgba(255,240,200,0.18)");
   tableLight.addColorStop(1, "rgba(255,240,200,0)");
@@ -103,7 +103,7 @@ function drawTable(ctx) {
 
 function drawTray(ctx) {
   const { x, y } = TRAY_CENTER;
-  const rx = TRAY_RADIUS, ry = TRAY_RADIUS * 0.42;
+  const rx = TRAY_RX, ry = TRAY_RY;
   ctx.save();
   // 盘影
   ctx.beginPath();

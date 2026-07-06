@@ -12,8 +12,8 @@ import { mixColor } from "./brew.js";
 import * as audio from "./audio.js";
 
 export const CUP = {
-  x: 660,
-  y: 550,
+  x: 375, // 竖屏居中
+  y: 755, // 杯底（杯口约在画面 40% 高度：755-235=520）
   rx: 112,
   ry: 40,
   height: 235, // 杯体可视高度

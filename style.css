@@ -16,6 +16,7 @@ html, body {
   height: 100%;
   background: var(--paper);
   overflow: hidden;
+  overscroll-behavior: none;
   font-family: "Kaiti SC", "STKaiti", "KaiTi", serif;
 }
 
@@ -27,11 +28,13 @@ html, body {
   align-items: center;
   justify-content: center;
   cursor: none;
+  touch-action: none; /* 手机上拖拽不触发页面滚动/缩放 */
 }
 
 #scene {
   display: block;
   background: var(--paper);
+  touch-action: none;
 }
 
 #cursor-dot {
