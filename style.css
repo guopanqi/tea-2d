@@ -1,0 +1,110 @@
+:root {
+  --paper: #f5f0e6;
+  --wood: #8a6f4d;
+  --ink: #3d4a3e;
+  --goji: #b03a2e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--paper);
+  overflow: hidden;
+  font-family: "Kaiti SC", "STKaiti", "KaiTi", serif;
+}
+
+#stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: none;
+}
+
+#scene {
+  display: block;
+  background: var(--paper);
+}
+
+#cursor-dot {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(61,74,62,0.35), rgba(61,74,62,0.12) 60%, transparent 70%);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: width 0.18s ease, height 0.18s ease, opacity 0.2s ease;
+  z-index: 9999;
+  opacity: 0;
+}
+
+#cursor-dot.active {
+  opacity: 1;
+}
+
+#cursor-dot.grabbing {
+  width: 20px;
+  height: 20px;
+  background: radial-gradient(circle at 35% 30%, rgba(61,74,62,0.5), rgba(61,74,62,0.18) 60%, transparent 70%);
+}
+
+#mute-btn {
+  position: fixed;
+  left: 18px;
+  bottom: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  opacity: 0.28;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+  z-index: 20;
+}
+
+#mute-btn:hover {
+  opacity: 0.6;
+}
+
+#mute-btn.muted {
+  opacity: 0.15;
+  text-decoration: line-through;
+}
+
+#reset-btn {
+  position: fixed;
+  left: 54px;
+  bottom: 18px;
+  color: var(--ink);
+  opacity: 0;
+  font-size: 13px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: opacity 1.2s ease;
+  z-index: 20;
+  pointer-events: none;
+  user-select: none;
+}
+
+#reset-btn.visible {
+  opacity: 0.32;
+  pointer-events: auto;
+}
+
+#reset-btn.visible:hover {
+  opacity: 0.6;
+}
