@@ -272,3 +272,50 @@ export function playChime() {
   osc.start(t);
   osc.stop(t + 1.7);
 }
+
+// ---- 搅拌：轻柔瓷匙划水声（低通噪声 + 轻微周期起伏）----
+let stirNode = null;
+
+export function startStir() {
+  if (!ctx || stirNode) return;
+  const src = ctx.createBufferSource();
+  src.buffer = getNoiseBuffer();
+  src.loop = true;
+  const filter = ctx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = 650;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.0001;
+  // 周期起伏（划圈的节奏感）
+  const lfo = ctx.createOscillator();
+  lfo.type = "sine";
+  lfo.frequency.value = 1.6;
+  const lfoGain = ctx.createGain();
+  lfoGain.gain.value = 0.02;
+  lfo.connect(lfoGain);
+  lfoGain.connect(gain.gain);
+  lfo.start();
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(masterGain);
+  src.start();
+  stirNode = { src, filter, gain, lfo };
+}
+
+export function updateStir(strength) {
+  if (!ctx || !stirNode) return;
+  const t = now();
+  stirNode.gain.gain.setTargetAtTime(Math.max(0, Math.min(1, strength)) * 0.09, t, 0.08);
+  stirNode.filter.frequency.setTargetAtTime(500 + strength * 400, t, 0.1);
+}
+
+export function stopStir() {
+  if (!ctx || !stirNode) return;
+  const t = now();
+  stirNode.gain.gain.setTargetAtTime(0.0001, t, 0.15);
+  const node = stirNode;
+  stirNode = null;
+  setTimeout(() => {
+    try { node.src.stop(); node.lfo.stop(); } catch (e) {}
+  }, 600);
+}

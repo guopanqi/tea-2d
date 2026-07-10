@@ -4,12 +4,14 @@
 
 ## 启动
 
-项目使用原生 ES Module，需要通过 HTTP 静态服务器访问。macOS 已自带的 Python 3 即可启动：
+项目使用原生 ES Module，需要通过 HTTP 静态服务器访问。运行下面的命令会启动服务器并自动打开浏览器：
 
 ```bash
 cd /Users/usr/Documents/play/tea
-python3 -m http.server 8080 --bind 0.0.0.0
+./run
 ```
+
+默认端口是 `8080`，也可以用 `./run 3000` 指定端口。脚本依赖 macOS 已自带的 Python 3。
 
 电脑浏览器打开：
 

@@ -20,6 +20,7 @@ export const LOGICAL_W = 750;
 export const LOGICAL_H = 1300;
 
 export const KETTLE_HOME = { x: 590, y: 220 };
+export const SPOON_HOME = { x: 668, y: 356, rot: -0.5 }; // 茶具角：壶旁斜放的茶匙
 
 // 调色板（STYLE.md：米灰底 + 低饱和主色 + 食物色只给草药茶汤 + 朱红点缀）
 const PALETTE = {
@@ -124,16 +125,55 @@ function drawTray(ctx) {
   ctx.restore();
 }
 
-// 杯：外沿环 + 空杯底色（俯视，贴纸化）
+// 杯：茶碟 + 杯耳把手 + 外沿环 + 空杯底色（英式小茶杯俯视，贴纸化）
 function drawCupBack(ctx) {
   const { x, y, r } = CUP;
   const innerR = cupInnerR();
+  const saucerR = r + 62;
   ctx.save();
-  // 整杯软投影
+
+  // 茶碟软投影
   ctx.beginPath();
-  ctx.arc(x + 5, y + 9, r, 0, Math.PI * 2);
+  ctx.arc(x + 5, y + 10, saucerR, 0, Math.PI * 2);
   ctx.fillStyle = PALETTE.shadow;
   ctx.filter = "blur(10px)";
+  ctx.fill();
+  ctx.filter = "none";
+
+  // 茶碟：浅色圆盘 + 细沿环
+  ctx.beginPath();
+  ctx.arc(x, y, saucerR, 0, Math.PI * 2);
+  ctx.fillStyle = "#e3dccb";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(110, 98, 72, 0.2)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x, y, saucerR - 14, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(110, 98, 72, 0.14)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 杯耳把手（右下 45°，圆弧环，避开右侧茶签浮入位）
+  const ha = Math.PI / 4; // 45° 朝右下
+  const hx = x + Math.cos(ha) * (r + 24);
+  const hy = y + Math.sin(ha) * (r + 24);
+  ctx.beginPath();
+  ctx.arc(hx, hy, 38, 0, Math.PI * 2);
+  ctx.arc(hx, hy, 24, 0, Math.PI * 2, true);
+  ctx.fillStyle = PALETTE.cupRing;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(hx, hy, 38, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(110, 98, 72, 0.22)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // 杯身软投影（落在碟上）
+  ctx.beginPath();
+  ctx.arc(x + 4, y + 7, r, 0, Math.PI * 2);
+  ctx.fillStyle = PALETTE.shadow;
+  ctx.filter = "blur(8px)";
   ctx.fill();
   ctx.filter = "none";
 
@@ -162,20 +202,24 @@ function drawCupBack(ctx) {
 }
 
 // 杯内沿细高光弧（画在水面之上，贴纸化的"玻璃感"）
-function drawCupFront(ctx) {
+// wobble: 0..1 搅拌强度——高光弧轻微游移颤动，停手后随强度衰减平复
+function drawCupFront(ctx, wobble = 0, t = 0) {
   const { x, y } = CUP;
   const innerR = cupInnerR();
+  const w1 = Math.sin(t * 6.3) * 0.09 * wobble;
+  const w2 = Math.cos(t * 8.1) * 0.07 * wobble;
+  const rj = Math.sin(t * 10.7) * 2.5 * wobble;
   ctx.save();
   ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
   ctx.lineWidth = 3;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.arc(x, y, innerR - 6, -2.2, -1.45);
+  ctx.arc(x, y, innerR - 6 + rj, -2.2 + w1, -1.45 + w1 + w2 * 0.5);
   ctx.stroke();
   ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(x, y, innerR - 6, 0.7, 1.15);
+  ctx.arc(x, y, innerR - 6 - rj, 0.7 + w2, 1.15 + w2 - w1 * 0.5);
   ctx.stroke();
   ctx.restore();
 }
@@ -244,6 +288,48 @@ function drawKettle(ctx, kx, ky, lean) {
   };
 }
 
+// 俯视茶匙：细长柄 + 椭圆匙头（贴纸化）。锚点 = 匙头中心，rot 为整体斜放角。
+function drawSpoon(ctx, sx, sy, rot) {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(rot);
+
+  // 软投影
+  ctx.save();
+  ctx.translate(2.5, 4.5);
+  ctx.filter = "blur(3px)";
+  ctx.fillStyle = PALETTE.shadow;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 15, 21, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(-3.5, 16, 7, 78, 3.5) : ctx.rect(-3.5, 16, 7, 78);
+  ctx.fill();
+  ctx.restore();
+
+  // 柄（细长圆头）
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-3.5, 16, 7, 78, 3.5);
+  else ctx.rect(-3.5, 16, 7, 78);
+  ctx.fillStyle = PALETTE.kettleDeep;
+  ctx.fill();
+
+  // 匙头（椭圆 + 内浅椭圆）
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 15, 21, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#a9a294";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(70, 62, 48, 0.22)";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 10, 15, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#c8c2b2";
+  ctx.fill();
+
+  ctx.restore();
+}
+
 function roundRectPath(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -260,6 +346,7 @@ export const ART = {
   cupBack: drawCupBack,
   cupFront: drawCupFront,
   kettle: drawKettle,
+  spoon: drawSpoon,
   grain: drawGrain,
 };
 

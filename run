@@ -1,0 +1,53 @@
+#!/bin/sh
+
+set -eu
+
+PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PORT=${1:-${PORT:-8080}}
+BIND=${BIND:-0.0.0.0}
+URL="http://localhost:${PORT}"
+
+case "$PORT" in
+  ''|*[!0-9]*)
+    echo "用法: ./run [端口]" >&2
+    exit 2
+    ;;
+esac
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "未找到 python3，无法启动本地服务器。" >&2
+  exit 1
+fi
+
+cleanup() {
+  trap - INT TERM EXIT
+  if [ -n "${SERVER_PID:-}" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  fi
+}
+
+trap cleanup INT TERM EXIT
+
+echo "正在启动一盏：${URL}"
+python3 -m http.server "$PORT" --bind "$BIND" --directory "$PROJECT_DIR" &
+SERVER_PID=$!
+
+# 给服务器一点启动时间，以便在端口被占用时直接报错退出。
+sleep 0.5
+if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+  wait "$SERVER_PID"
+fi
+
+if [ "${RUN_NO_OPEN:-0}" != "1" ]; then
+  if command -v open >/dev/null 2>&1; then
+    open "$URL"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$URL" >/dev/null 2>&1 || true
+  else
+    echo "请在浏览器打开 ${URL}"
+  fi
+fi
+
+echo "服务器已启动，按 Ctrl+C 停止。"
+wait "$SERVER_PID"

@@ -6,7 +6,7 @@
 //   → 水面微光(steam) → ART.cupFront(高光弧) → 壶+注水滴 → 拖拽中的草药 → 茶签 → ART.grain
 import * as scene from "./scene.js";
 import { Herb, createTrayHerbs, drawHerb, updateHerb, hitTestHerb, HERB_HIT_RADIUS } from "./herbs.js";
-import { WaterSystem, drawCupWater, drawCupSurfaceFx, drawPourStream, CUP, cupInnerR } from "./water.js";
+import { WaterSystem, drawCupWater, drawCupSurfaceFx, drawPourStream, vortexEyeR, CUP, cupInnerR } from "./water.js";
 import { SteamSystem } from "./steam.js";
 import { brew, nameTea } from "./brew.js";
 import { TeaLabel } from "./label.js";
@@ -74,6 +74,18 @@ let kettleTargetY = kettleY;
 let kettleLean = 0; // 注水时的轻微倾侧（俯视示意）
 let kettleDragging = false;
 let pourHold = 0; // 壶在杯上方按住的时长（控制水流由细到稳）
+
+// 茶匙（茶具角，可拈起入杯画圈搅拌）
+let spoonX = scene.SPOON_HOME.x;
+let spoonY = scene.SPOON_HOME.y;
+let spoonTargetX = spoonX;
+let spoonTargetY = spoonY;
+let spoonRot = scene.SPOON_HOME.rot;
+let spoonDragging = false;
+let prevSpoonHeading = null; // 匙头速度方向（画圈检测：转向速度，与位置无关）
+let prevSpoonX = null, prevSpoonY = null; // 匙头线速度检测（尾迹/涡脱落）
+let stirStrength = 0; // 0..1 平滑后的搅拌强度
+let stirSoundOn = false;
 
 let draggingHerb = null;
 let dragOffsetX = 0, dragOffsetY = 0;
@@ -161,6 +173,16 @@ canvas.addEventListener("pointerdown", (e) => {
     return;
   }
 
+  if (distTo(x, y, spoonX, spoonY) < 55) {
+    spoonDragging = true;
+    prevSpoonHeading = null;
+    prevSpoonX = null;
+    prevSpoonY = null;
+    cursorDot.classList.add("grabbing");
+    audio.playPickup();
+    return;
+  }
+
   const herb = hitTestHerb(trayHerbs, x, y, ["tray", "hover"]);
   if (herb) {
     dragOffsetX = herb.x - x;
@@ -180,6 +202,12 @@ window.addEventListener("pointermove", (e) => {
     return;
   }
 
+  if (spoonDragging) {
+    spoonTargetX = x;
+    spoonTargetY = y;
+    return;
+  }
+
   if (draggingHerb) {
     dragPointerX = x;
     dragPointerY = y;
@@ -188,9 +216,13 @@ window.addEventListener("pointermove", (e) => {
   }
 });
 
-window.addEventListener("pointerup", (e) => {
+function handlePointerEnd(e) {
   const { x, y } = toLogical(e.clientX, e.clientY);
   cursorDot.classList.remove("grabbing");
+  // 触屏抬手后自绘光标不应残留；鼠标保持跟随
+  if (e.pointerType !== "mouse") {
+    cursorDot.classList.remove("active");
+  }
 
   if (kettleDragging) {
     kettleDragging = false;
@@ -198,15 +230,26 @@ window.addEventListener("pointerup", (e) => {
     kettleTargetY = scene.KETTLE_HOME.y;
   }
 
+  if (spoonDragging) {
+    spoonDragging = false;
+    spoonTargetX = scene.SPOON_HOME.x;
+    spoonTargetY = scene.SPOON_HOME.y;
+    prevSpoonHeading = null;
+    prevSpoonX = null;
+    prevSpoonY = null;
+  }
+
   if (draggingHerb) {
     endDrag(draggingHerb, x, y);
     draggingHerb = null;
   }
-});
+}
+window.addEventListener("pointerup", handlePointerEnd);
+window.addEventListener("pointercancel", handlePointerEnd);
 
 // 悬停态（非拖拽时）
 canvas.addEventListener("pointermove", (e) => {
-  if (draggingHerb || kettleDragging) return;
+  if (draggingHerb || kettleDragging || spoonDragging) return;
   const { x, y } = toLogical(e.clientX, e.clientY);
   for (const h of trayHerbs) {
     if (h.state === "tray" || h.state === "hover") {
@@ -403,6 +446,121 @@ function update(dt) {
     water.flowThickness *= 0.85;
   }
 
+  // ---- 茶匙：跟手弹簧 + 画圈搅拌 ----
+  spoonX += (spoonTargetX - spoonX) * 0.16;
+  spoonY += (spoonTargetY - spoonY) * 0.16;
+  // 匙柄朝向：拖动时顺运动方向微转，归位时回到斜放角
+  const spoonRotTarget = spoonDragging
+    ? Math.max(-1.1, Math.min(0.2, (spoonTargetX - spoonX) * 0.02 - 0.5))
+    : scene.SPOON_HOME.rot;
+  spoonRot += (spoonRotTarget - spoonRot) * 0.1;
+
+  let stirTarget = 0;
+  const spoonInCup = distTo(spoonX, spoonY, CUP.x, CUP.y) < cupInnerR();
+  if (spoonDragging && spoonInCup && water.level > 0.05) {
+    if (prevSpoonX !== null) {
+      const vx = spoonX - prevSpoonX;
+      const vy = spoonY - prevSpoonY;
+      const speed = Math.hypot(vx, vy) / Math.max(dt, 1e-4);
+      // 画圈检测：看匙头自身轨迹的转向速度——在杯里任何位置画圈都算，
+      // 不必绕杯心，小圈快画同样能把水带起来
+      if (speed > 40) {
+        const heading = Math.atan2(vy, vx);
+        if (prevSpoonHeading !== null) {
+          let dAng = heading - prevSpoonHeading;
+          if (dAng > Math.PI) dAng -= Math.PI * 2;
+          if (dAng < -Math.PI) dAng += Math.PI * 2;
+          // 急折返（来回直线抖动）不算画圈
+          if (Math.abs(dAng) < 1.2) {
+            const omega = dAng / Math.max(dt, 1e-4); // 轨迹转向角速度 rad/s
+            stirTarget = Math.max(-1, Math.min(1, omega / 10));
+            const swirlTarget = Math.max(-4.5, Math.min(4.5, omega * 0.35));
+            // 持续画圈才逐渐把整杯水带起来：动量慢慢累积（~1-2s 起涡）
+            water.swirl += (swirlTarget - water.swirl) * Math.min(1, dt * 1.0);
+            if (Math.abs(dAng) > 0.04) {
+              // 圈的圆心在速度法线方向上，距离 = 位移/转角——涡就起在打圈处
+              const ccx = spoonX - vy / dAng;
+              const ccy = spoonY + vx / dAng;
+              water.stirCenter(ccx - CUP.x, ccy - CUP.y);
+            }
+          }
+        }
+        prevSpoonHeading = heading;
+      }
+      // 匙头划水：尾迹 + 涡脱落（连续剪切的语言，不用同心圆涟漪）
+      water.stirAt(spoonX - CUP.x, spoonY - CUP.y, dt, speed);
+    }
+    prevSpoonX = spoonX;
+    prevSpoonY = spoonY;
+  } else {
+    prevSpoonHeading = null;
+    prevSpoonX = null;
+    prevSpoonY = null;
+  }
+  stirStrength += (Math.abs(stirTarget) - stirStrength) * Math.min(1, dt * 4);
+  water.stirLevel = stirStrength;
+
+  // 搅拌音效
+  if (stirStrength > 0.08 && !stirSoundOn) {
+    audio.startStir();
+    stirSoundOn = true;
+  } else if (stirStrength < 0.04 && stirSoundOn) {
+    audio.stopStir();
+    stirSoundOn = false;
+  }
+  if (stirSoundOn) audio.updateStir(stirStrength);
+
+  // 杯中草药被切向速度场带动绕圈（内快外慢；随 swirl 衰减慢慢回到慢漂移）
+  // 起涡时被吸向涡眼，停在眼缘外绕圈——龙卷风把料"聚拢到涡心"
+  if (Math.abs(water.swirl) > 0.02) {
+    const R = Math.max(1, water.fillRadius());
+    const v = water.vortex;
+    const vcx = CUP.x + water.vortexX; // 涡心：在哪儿打圈就绕哪儿
+    const vcy = CUP.y + water.vortexY;
+    for (const h of cupHerbs) {
+      if (h.state !== "inwater") continue;
+      const dx = h.x - vcx, dy = h.y - vcy;
+      const r = Math.hypot(dx, dy) || 1;
+      // Rankine 涡：核内近似刚转，核外切速随距离衰减
+      // ——远处草药不会被甩去贴杯壁，而是慢慢卷入
+      const core = R * 0.45;
+      const falloff = r < core ? 1 : core / r;
+      const theta = water.swirl * dt * 0.85 * falloff * (1 + 0.5 * v);
+      const cos = Math.cos(theta), sin = Math.sin(theta);
+      let nx = dx * cos - dy * sin;
+      let ny = dx * sin + dy * cos;
+      if (v > 0.05) {
+        const minR = vortexEyeR(water) + 20; // 眼缘外留位，别叠进涡眼
+        if (r > minR) {
+          const pull = Math.min(r - minR, v * dt * (20 + r * 0.7));
+          const k = (r - pull) / r;
+          nx *= k;
+          ny *= k;
+        }
+      }
+      h.x = vcx + nx;
+      h.y = vcy + ny;
+      // 绕偏心涡旋转可能被甩出水面圆，收回水缘内
+      const cdx = h.x - CUP.x, cdy = h.y - CUP.y;
+      const cd = Math.hypot(cdx, cdy);
+      const maxR = R - 12;
+      if (cd > maxR) {
+        h.x = CUP.x + (cdx / cd) * maxR;
+        h.y = CUP.y + (cdy / cd) * maxR;
+      }
+      h.rotation += theta * 0.6;
+    }
+  }
+  // TODO(debug): 调完龙卷风后删
+  window.__dbg = {
+    swirl: water.swirl.toFixed(2),
+    vortex: water.vortex.toFixed(2),
+    vx: water.vortexX.toFixed(0),
+    vy: water.vortexY.toFixed(0),
+    fillR: water.fillRadius().toFixed(0),
+    herbs: cupHerbs.map((h) => `${h.state}@${h.x.toFixed(0)},${h.y.toFixed(0)}`),
+  };
+
   // ---- 草药更新 ----
   for (const h of trayHerbs) updateHerb(h, dt);
 
@@ -423,7 +581,11 @@ function update(dt) {
     }
   }
 
-  water._displayColor = brewColorForCurrentState();
+  const displayColor = brewColorForCurrentState();
+  // 水越满汤色越深越饱和（俯视的深度线索）
+  displayColor.l = Math.max(36, displayColor.l - water.level * 12);
+  displayColor.s = Math.min(90, displayColor.s + water.level * 10);
+  water._displayColor = displayColor;
   water.update(dt, herbsInWaterForDiffuse);
 
   // 注水时水流冲击已有草药：漂移被搅快一点 + 落点涟漪
@@ -449,7 +611,7 @@ function update(dt) {
     steeping = true;
   }
   if (steeping && !water.pouring && !kettleDragging && !steepDone) {
-    steepTimer += dt;
+    steepTimer += dt * (1 + stirStrength * 2); // 搅拌时最高 3 倍速浸泡
     if (steepTimer >= FULL_STEEP_SECONDS) {
       steepDone = true;
       settleTimer = 0;
@@ -521,14 +683,15 @@ function render() {
   }
   drawCupSurfaceFx(ctx, water); // 涟漪/水珠（水面在草药之上）
   steam.draw(ctx); // 水面微光/雾纹
-  scene.ART.cupFront(ctx); // 内沿细高光弧
+  scene.ART.cupFront(ctx, water.stirLevel, water.noiseTime); // 内沿细高光弧（搅拌时轻微颤动）
 
-  // 壶（含注水滴）
+  // 壶（含注水滴）与茶匙（茶具角）
   const spoutPos = scene.ART.kettle(ctx, kettleX, kettleY, kettleLean);
   if (water.pouring) {
     const land = pourLandingPoint();
     drawPourStream(ctx, spoutPos.x, spoutPos.y, land.x, land.y, water.flowThickness);
   }
+  scene.ART.spoon(ctx, spoonX, spoonY, spoonRot);
 
   // 正在拖拽的草药画在最上层
   if (draggingHerb) drawHerb(ctx, draggingHerb);
