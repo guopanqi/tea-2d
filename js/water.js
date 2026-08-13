@@ -49,7 +49,9 @@ export class WaterSystem {
     this.vortexY = 0;
     this._vortexTX = 0; // 涡心目标（由 stirCenter 写入）
     this._vortexTY = 0;
-    this._stirFresh = 0; // >0 表示刚在此处搅拌；归零后涡心向杯心回迁
+    this._stirSampleX = 0; // 最近一次画圈估出的局部圆心，仅作为主涡的小幅偏置
+    this._stirSampleY = 0;
+    this._stirFresh = 0; // >0 表示最近仍在画圈；归零后涡心向杯心回迁
     this.flowAlpha = 0; // 分层水流弧的可见度（随 swirl 淡入淡出）
     this.flowArcs = [
       { rf: 0.36, ang: 1.1, span: 1.1 }, // rf: 半径占内径比；内层转得快
@@ -74,6 +76,8 @@ export class WaterSystem {
     this.vortexY = 0;
     this._vortexTX = 0;
     this._vortexTY = 0;
+    this._stirSampleX = 0;
+    this._stirSampleY = 0;
     this._stirFresh = 0;
     this.flowAlpha = 0;
     this.diffuseField.fill(0);
@@ -102,7 +106,9 @@ export class WaterSystem {
     }
   }
 
-  // 报告当前画圈的圆心（相对杯心）：涡就在打圈的地方成形
+  // 报告当前画圈的圆心（相对杯心）。
+  // 这里只记录局部搅动位置；主涡在 update 中以很大的惯性缓慢响应，
+  // 避免瞬时曲率估算的噪声让整杯水的圆心跟着勺子乱跳。
   stirCenter(relX, relY) {
     const lim = this.fillRadius() * 0.62; // 涡眼别贴到水缘
     const d = Math.hypot(relX, relY);
@@ -110,9 +116,9 @@ export class WaterSystem {
       relX *= lim / d;
       relY *= lim / d;
     }
-    this._vortexTX = relX;
-    this._vortexTY = relY;
-    this._stirFresh = 0.5;
+    this._stirSampleX = relX;
+    this._stirSampleY = relY;
+    this._stirFresh = 0.24;
   }
 
   // 水色圆当前半径（逻辑像素）
@@ -215,15 +221,32 @@ export class WaterSystem {
       (vortexTarget - this.vortex) *
       Math.min(1, dt * (vortexTarget > this.vortex ? 3 : 1.1));
     this.vortexAng += this.swirl * dt * 1.5;
-    // 涡心跟着打圈位置走；停手后慢慢向杯心回迁
+    // 主涡圆心有远大于勺子的惯性：局部画圈只造成少量、缓慢的偏移。
+    // 涡越强，越受整只圆杯的边界约束，不会被勺子突然拖去别处。
     this._stirFresh = Math.max(0, this._stirFresh - dt);
-    if (this._stirFresh <= 0) {
-      const back = Math.max(0, 1 - dt * 0.25);
+    if (this._stirFresh > 0) {
+      const localBias = 0.2 - this.vortex * 0.08;
+      const desiredX = this._stirSampleX * localBias;
+      const desiredY = this._stirSampleY * localBias;
+      const gather = Math.min(1, dt * 0.65);
+      this._vortexTX += (desiredX - this._vortexTX) * gather;
+      this._vortexTY += (desiredY - this._vortexTY) * gather;
+    } else {
+      const back = Math.max(0, 1 - dt * 0.5);
       this._vortexTX *= back;
       this._vortexTY *= back;
     }
-    this.vortexX += (this._vortexTX - this.vortexX) * Math.min(1, dt * 2.5);
-    this.vortexY += (this._vortexTY - this.vortexY) * Math.min(1, dt * 2.5);
+    const follow = Math.min(1, dt * (0.8 - this.vortex * 0.3));
+    let moveX = (this._vortexTX - this.vortexX) * follow;
+    let moveY = (this._vortexTY - this.vortexY) * follow;
+    const move = Math.hypot(moveX, moveY);
+    const maxMove = this.fillRadius() * (0.1 - this.vortex * 0.04) * dt;
+    if (move > maxMove && move > 0) {
+      moveX *= maxMove / move;
+      moveY *= maxMove / move;
+    }
+    this.vortexX += moveX;
+    this.vortexY += moveY;
     // 涡越强旋转惯性越大，平息得越慢（猛晃后 4~6s 归于平静）
     this.swirl *= Math.max(0, 1 - dt * (0.7 - 0.4 * this.vortex));
 
@@ -415,6 +438,18 @@ export function drawCupSurfaceFx(ctx, water) {
     ctx.strokeStyle = `rgba(255,255,255,${0.3 * v})`;
     ctx.lineWidth = 1.6;
     ctx.stroke();
+
+    // 漏斗内壁的几道不完整亮弧，以不同速度错开旋转，强化向下收束感。
+    ctx.lineCap = "round";
+    for (let i = 0; i < 3; i++) {
+      const rr = eyeR * (1.2 + i * 0.55);
+      const start = water.vortexAng * (1.35 - i * 0.16) + i * 1.9;
+      ctx.beginPath();
+      ctx.arc(vcx, vcy, rr, start, start + Math.PI * (0.42 + i * 0.08));
+      ctx.strokeStyle = `rgba(255,255,255,${(0.22 - i * 0.045) * v})`;
+      ctx.lineWidth = 1.4 + (2 - i) * 0.25;
+      ctx.stroke();
+    }
 
     // 三条长螺旋臂：涡成形过半后才浮现（低涡度时由弯曲的流弧过渡）
     // 用沉淀深色而非白色——浅汤上白线没有对比

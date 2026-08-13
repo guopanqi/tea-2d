@@ -20,8 +20,6 @@ export const TRAY_RY = 62;
 export const HERB_ART_SCALE = 2.2;
 export const HERB_HIT_RADIUS = 62;
 
-const HERB_ORDER = ["chrysanthemum", "goji", "mint", "rose", "licorice"];
-
 // 五味一字排开（间距 130 逻辑像素），微微错落
 function trayPositionFor(index, total) {
   const spacing = 130;
@@ -66,13 +64,15 @@ export class Herb {
     this.spinSpeed = (Math.random() < 0.5 ? -1 : 1) * (0.06 + Math.random() * 0.1);
     this.driftEnabled = false; // 由 main 按水量开关
     this.sink = 0; // 0(浮)..1(沉)，绘制时缩小/降透明/压深
+    // 主涡形成后，每份草药有自己的稳定轨道；避免所有材料挤成中心一团。
+    this.vortexOrbit = 0.3 + ((this.instanceId * 0.61803398875) % 1) * 0.38;
   }
 }
 
-export function createTrayHerbs() {
+export function createTrayHerbs(ids = ["chrysanthemum", "goji", "mint", "rose", "licorice"]) {
   const herbs = [];
-  HERB_ORDER.forEach((id, i) => {
-    const pos = trayPositionFor(i, HERB_ORDER.length);
+  ids.forEach((id, i) => {
+    const pos = trayPositionFor(i, ids.length);
     herbs.push(new Herb(id, pos.x, pos.y));
   });
   return herbs;
@@ -250,6 +250,35 @@ export const HERB_ART = {
     steeped: (ctx, spread) => licoriceShape(ctx, spread, seedOf("licorice")),
   },
 };
+
+const GENERIC_COLORS = {
+  hawthorn: ["#b75c4d", "#e6b07d"], jujube: ["#8f4537", "#c98262"],
+  tangerine: ["#c47a35", "#edbd70"], mulberry: ["#70435a", "#bd7790"],
+  ginger: ["#d3ad68", "#f0d79d"],
+};
+
+function genericHerbShape(ctx, herbId, spread = 0) {
+  const colors = GENERIC_COLORS[herbId] || ["#8c9874", "#cbd0aa"];
+  const seed = seedOf(herbId);
+  const pieces = herbId === "tangerine" || herbId === "ginger" ? 2 : 3;
+  for (let i = 0; i < pieces; i++) {
+    const a = (i / pieces) * Math.PI * 2 + 0.45;
+    ctx.save();
+    ctx.translate(Math.cos(a) * 5, Math.sin(a) * 5);
+    ctx.rotate(a + spread * 0.2);
+    blobPath(ctx, 7.5 + spread, seed + i * 19, 0.12, 8, herbId === "tangerine" ? 0.65 : 1.2);
+    ctx.fillStyle = i % 2 ? colors[1] : colors[0];
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+for (const herbId of Object.keys(GENERIC_COLORS)) {
+  HERB_ART[herbId] = {
+    dry: (ctx) => genericHerbShape(ctx, herbId, 0),
+    steeped: (ctx, spread) => genericHerbShape(ctx, herbId, spread),
+  };
+}
 
 // ══════════════════ 绘制 ══════════════════
 

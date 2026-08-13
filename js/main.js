@@ -8,7 +8,7 @@ import * as scene from "./scene.js";
 import { Herb, createTrayHerbs, drawHerb, updateHerb, hitTestHerb, HERB_HIT_RADIUS } from "./herbs.js";
 import { WaterSystem, drawCupWater, drawCupSurfaceFx, drawPourStream, vortexEyeR, CUP, cupInnerR } from "./water.js";
 import { SteamSystem } from "./steam.js";
-import { brew, nameTea } from "./brew.js";
+import { brew, nameTea, HERBS, HERB_ORDER, RECIPE_BOOK, analyzeFormula } from "./brew.js";
 import { TeaLabel } from "./label.js";
 import * as audio from "./audio.js";
 
@@ -20,6 +20,17 @@ const ctx = canvas.getContext("2d");
 const cursorDot = document.getElementById("cursor-dot");
 const muteBtn = document.getElementById("mute-btn");
 const resetBtn = document.getElementById("reset-btn");
+const cabinetBtn = document.getElementById("cabinet-btn");
+const cabinet = document.getElementById("herb-cabinet");
+const cabinetClose = document.getElementById("cabinet-close");
+const cabinetScrim = document.getElementById("cabinet-scrim");
+const cabinetGrid = document.getElementById("cabinet-grid");
+const recipeList = document.getElementById("recipe-list");
+const formulaHud = document.getElementById("formula-hud");
+const formulaSummary = document.getElementById("formula-summary");
+const formulaChips = document.getElementById("formula-chips");
+const formulaMessage = document.getElementById("formula-message");
+const undoHerbBtn = document.getElementById("undo-herb");
 
 let scaleFactor = 1;
 let offsetX = 0, offsetY = 0;
@@ -61,7 +72,8 @@ function onDprChange() {
 watchDpr();
 
 // ---- 状态 ----
-const trayHerbs = createTrayHerbs();
+let selectedTrayIds = HERB_ORDER.slice(0, 5);
+let trayHerbs = createTrayHerbs(selectedTrayIds);
 const cupHerbs = []; // 已落入水中/正在下落的草药实例
 const water = new WaterSystem();
 const steam = new SteamSystem();
@@ -152,6 +164,100 @@ resetBtn.addEventListener("click", () => {
   if (!resetBtn.classList.contains("visible")) return;
   softReset();
 });
+
+function setCabinetOpen(open) {
+  cabinet.classList.toggle("open", open);
+  cabinetScrim.classList.toggle("open", open);
+  cabinet.setAttribute("aria-hidden", String(!open));
+  cabinetBtn.setAttribute("aria-expanded", String(open));
+}
+
+cabinetBtn.addEventListener("click", () => setCabinetOpen(true));
+cabinetClose.addEventListener("click", () => setCabinetOpen(false));
+cabinetScrim.addEventListener("click", () => setCabinetOpen(false));
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") setCabinetOpen(false);
+});
+
+function rebuildTray() {
+  trayHerbs = createTrayHerbs(selectedTrayIds);
+  renderCabinet();
+}
+
+function chooseHerbForTray(id) {
+  if (draggingHerb) return;
+  const index = selectedTrayIds.indexOf(id);
+  if (index >= 0) {
+    if (selectedTrayIds.length > 1) selectedTrayIds.splice(index, 1);
+  } else if (selectedTrayIds.length < 5) {
+    selectedTrayIds.push(id);
+  } else {
+    selectedTrayIds.shift();
+    selectedTrayIds.push(id);
+  }
+  rebuildTray();
+}
+
+function renderCabinet() {
+  cabinetGrid.innerHTML = "";
+  for (const id of HERB_ORDER) {
+    const herb = HERBS[id];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `cabinet-herb${selectedTrayIds.includes(id) ? " selected" : ""}`;
+    button.title = herb.caution;
+    button.innerHTML = `<strong>${herb.name}</strong><span>${herb.nature} · 每份约${herb.portionG}g</span><span>${herb.effect}</span><em>${selectedTrayIds.includes(id) ? "在盘" : "入盘"}</em>`;
+    button.addEventListener("click", () => chooseHerbForTray(id));
+    cabinetGrid.appendChild(button);
+  }
+}
+
+function renderRecipes() {
+  recipeList.innerHTML = "";
+  for (const recipe of RECIPE_BOOK) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "recipe-card";
+    const ingredients = Object.entries(recipe.counts).map(([id, n]) => `${HERBS[id].name}×${n}`).join(" · ");
+    button.innerHTML = `<strong>${recipe.name}</strong><span>${ingredients}</span><small>${recipe.note}</small>`;
+    button.addEventListener("click", () => {
+      selectedTrayIds = Object.keys(recipe.counts);
+      rebuildTray();
+    });
+    recipeList.appendChild(button);
+  }
+}
+
+function updateFormulaHud() {
+  const ids = cupHerbs.map((h) => h.herbId);
+  const analysis = analyzeFormula(ids, 400);
+  formulaHud.classList.toggle("caution", analysis.level === "caution");
+  formulaSummary.textContent = analysis.entries.length
+    ? `${analysis.natureLabel} · ${analysis.totalG.toFixed(1)}g / 400ml`
+    : "杯中尚清 · 400ml";
+  formulaChips.innerHTML = analysis.entries.map((h) => `<span class="formula-chip">${h.name} × ${h.count}</span>`).join("");
+  formulaMessage.textContent = analysis.entries.length
+    ? `${analysis.theory} ${analysis.messages.join(" ")}`
+    : analysis.messages[0];
+  undoHerbBtn.classList.toggle("visible", cupHerbs.length > 0);
+}
+
+undoHerbBtn.addEventListener("click", () => {
+  const herb = cupHerbs.pop();
+  if (!herb) return;
+  steepDone = false;
+  steeping = false;
+  steepTimer = 0;
+  settleTimer = 0;
+  labelShown = false;
+  label.exit();
+  resetBtn.classList.remove("visible");
+  updateFormulaHud();
+});
+
+renderCabinet();
+renderRecipes();
+updateFormulaHud();
 
 // ---- 指针事件 ----
 function distTo(x, y, px, py) {
@@ -260,16 +366,6 @@ canvas.addEventListener("pointermove", (e) => {
 });
 
 function startDrag(herb, x, y) {
-  // 数量限制：同款最多 3 份在杯中，第4次拈起时轻轻飘回（温柔地不允许）
-  const countInPlay = cupHerbs.filter((h) => h.herbId === herb.herbId).length;
-  if (countInPlay >= 3) {
-    herb.state = "returning";
-    herb.age = 0;
-    herb.returnStartTime = 0;
-    herb.returnFromX = herb.x;
-    herb.returnFromY = herb.y - 12;
-    return;
-  }
   herb.state = "dragging";
   herb.targetX = x + dragOffsetX;
   herb.targetY = y + dragOffsetY;
@@ -329,6 +425,7 @@ function dropHerbIntoCup(trayHerb) {
   trayHerb.returnFromY = trayHerb.y - 4;
 
   audio.playHerbTick(trayHerb.herbId);
+  updateFormulaHud();
 }
 
 // ---- 软重置 ----
@@ -360,6 +457,7 @@ function softReset() {
       settleTimer = 0;
       labelShown = false;
       resetting = false;
+      updateFormulaHud();
       return true;
     }
     return false;
@@ -473,8 +571,8 @@ function update(dt) {
           // 急折返（来回直线抖动）不算画圈
           if (Math.abs(dAng) < 1.2) {
             const omega = dAng / Math.max(dt, 1e-4); // 轨迹转向角速度 rad/s
-            stirTarget = Math.max(-1, Math.min(1, omega / 10));
-            const swirlTarget = Math.max(-4.5, Math.min(4.5, omega * 0.35));
+            stirTarget = Math.max(-1, Math.min(1, omega / 8));
+            const swirlTarget = Math.max(-5.2, Math.min(5.2, omega * 0.5));
             // 持续画圈才逐渐把整杯水带起来：动量慢慢累积（~1-2s 起涡）
             water.swirl += (swirlTarget - water.swirl) * Math.min(1, dt * 1.0);
             if (Math.abs(dAng) > 0.04) {
@@ -498,20 +596,23 @@ function update(dt) {
     prevSpoonY = null;
   }
   stirStrength += (Math.abs(stirTarget) - stirStrength) * Math.min(1, dt * 4);
-  water.stirLevel = stirStrength;
+  // 停手后整杯水仍在凭惯性旋转，高光和水声也应逐渐平息，而不是立即消失。
+  const residualMotion = Math.min(0.72, Math.abs(water.swirl) / 5);
+  const surfaceMotion = Math.max(stirStrength, residualMotion);
+  water.stirLevel = surfaceMotion;
 
   // 搅拌音效
-  if (stirStrength > 0.08 && !stirSoundOn) {
+  if (surfaceMotion > 0.08 && !stirSoundOn) {
     audio.startStir();
     stirSoundOn = true;
-  } else if (stirStrength < 0.04 && stirSoundOn) {
+  } else if (surfaceMotion < 0.04 && stirSoundOn) {
     audio.stopStir();
     stirSoundOn = false;
   }
-  if (stirSoundOn) audio.updateStir(stirStrength);
+  if (stirSoundOn) audio.updateStir(surfaceMotion);
 
   // 杯中草药被切向速度场带动绕圈（内快外慢；随 swirl 衰减慢慢回到慢漂移）
-  // 起涡时被吸向涡眼，停在眼缘外绕圈——龙卷风把料"聚拢到涡心"
+  // 主涡成形后各自进入不同轨道：有的靠内、有的靠外，不会挤成中心一团。
   if (Math.abs(water.swirl) > 0.02) {
     const R = Math.max(1, water.fillRadius());
     const v = water.vortex;
@@ -531,12 +632,13 @@ function update(dt) {
       let ny = dx * sin + dy * cos;
       if (v > 0.05) {
         const minR = vortexEyeR(water) + 20; // 眼缘外留位，别叠进涡眼
-        if (r > minR) {
-          const pull = Math.min(r - minR, v * dt * (20 + r * 0.7));
-          const k = (r - pull) / r;
-          nx *= k;
-          ny *= k;
-        }
+        const floatShift = h.def.floats === true ? 0.05 : h.def.floats === "half" ? 0 : -0.035;
+        const orbitRatio = Math.max(0.26, Math.min(0.72, h.vortexOrbit + floatShift));
+        const orbitR = Math.max(minR, Math.min(R - 16, R * orbitRatio));
+        const settle = Math.min(1, v * dt * (0.7 + v * 0.9));
+        const nextR = r + (orbitR - r) * settle;
+        nx *= nextR / r;
+        ny *= nextR / r;
       }
       h.x = vcx + nx;
       h.y = vcy + ny;
@@ -551,15 +653,6 @@ function update(dt) {
       h.rotation += theta * 0.6;
     }
   }
-  // TODO(debug): 调完龙卷风后删
-  window.__dbg = {
-    swirl: water.swirl.toFixed(2),
-    vortex: water.vortex.toFixed(2),
-    vx: water.vortexX.toFixed(0),
-    vy: water.vortexY.toFixed(0),
-    fillR: water.fillRadius().toFixed(0),
-    herbs: cupHerbs.map((h) => `${h.state}@${h.x.toFixed(0)},${h.y.toFixed(0)}`),
-  };
 
   // ---- 草药更新 ----
   for (const h of trayHerbs) updateHerb(h, dt);
@@ -702,4 +795,3 @@ function render() {
 }
 
 requestAnimationFrame(frame);
-

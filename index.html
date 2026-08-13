@@ -12,6 +12,26 @@
   <div id="cursor-dot"></div>
   <button id="mute-btn" title="静音" aria-label="静音">♪</button>
   <div id="reset-btn">再沏一盏</div>
+  <button id="cabinet-btn" type="button" aria-expanded="false" aria-controls="herb-cabinet"><span>百草柜</span><small>换一味草木</small></button>
+  <section id="formula-hud" aria-live="polite">
+    <div class="hud-heading"><span>此刻方笺</span><button id="undo-herb" type="button">退一味</button></div>
+    <div id="formula-summary">杯中尚清</div>
+    <div id="formula-chips"></div>
+    <div id="formula-message">将草木投入杯中，配伍会在这里显现。</div>
+  </section>
+  <aside id="herb-cabinet" aria-hidden="true">
+    <div class="cabinet-head">
+      <div><small>一盏 · 百草柜</small><h2>择五味置于茶盘</h2></div>
+      <button id="cabinet-close" type="button" aria-label="合上药柜">×</button>
+    </div>
+    <p class="cabinet-intro">点选药材与茶盘交换。茶盘最多五味；同一味可反复投入杯中。</p>
+    <div id="cabinet-grid"></div>
+    <div class="cabinet-rule"></div>
+    <div class="recipe-heading"><span>茶方笺</span><small>点一下换好茶盘</small></div>
+    <div id="recipe-list"></div>
+    <p class="medical-note">本体验只呈现传统中医药理论与一般饮用提醒，不构成诊断、处方或个体化用药建议。孕期、儿童、慢病或正在服药者，请先咨询医生或药师。</p>
+  </aside>
+  <div id="cabinet-scrim"></div>
 </div>
 <script type="module" src="js/main.js"></script>
 </body>
