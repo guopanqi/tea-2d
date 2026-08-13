@@ -1,10 +1,12 @@
-// audio.js — WebAudio 全合成音效集合，无音频文件
-// 首次 pointerdown 时由 main.js 调用 initAudio()
+// audio.js — WebAudio 合成音效 + 循环背景音乐
+// 首次 pointerdown / touchstart 时由 main.js 调用 initAudio()，满足浏览器自动播放策略。
 
 let ctx = null;
 let masterGain = null;
 let muted = false;
 let ambientNodes = null;
+const backgroundMusic = document.getElementById("background-music");
+if (backgroundMusic) backgroundMusic.volume = 0.28;
 
 function now() {
   return ctx ? ctx.currentTime : 0;
@@ -15,7 +17,11 @@ export function isInited() {
 }
 
 export function initAudio() {
-  if (ctx) return;
+  startBackgroundMusic();
+  if (ctx) {
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    return;
+  }
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return;
   ctx = new AC();
@@ -27,6 +33,7 @@ export function initAudio() {
 
 export function setMuted(m) {
   muted = m;
+  if (backgroundMusic) backgroundMusic.muted = muted;
   if (masterGain) {
     masterGain.gain.setTargetAtTime(muted ? 0 : 0.9, now(), 0.15);
   }
@@ -35,6 +42,15 @@ export function setMuted(m) {
 export function toggleMuted() {
   setMuted(!muted);
   return muted;
+}
+
+// ---- 背景音乐：用户首次交互后开始，循环播放 ----
+function startBackgroundMusic() {
+  if (backgroundMusic && backgroundMusic.paused) {
+    backgroundMusic.play().catch(() => {
+      // 自动播放仍被浏览器拦截时，下一次用户交互会再次调用 initAudio()。
+    });
+  }
 }
 
 // 生成一段噪声 buffer（白噪声），可复用

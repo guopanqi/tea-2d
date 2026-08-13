@@ -10,7 +10,7 @@ import { WaterSystem, drawCupWater, drawCupSurfaceFx, drawPourStream, vortexEyeR
 import { SteamSystem } from "./steam.js";
 import { brew, nameTea, HERBS, HERB_ORDER, RECIPE_BOOK, analyzeFormula } from "./brew.js";
 import { TeaLabel } from "./label.js";
-import * as audio from "./audio.js";
+import * as audio from "./audio.js?v=music-1";
 
 const LOGICAL_W = scene.LOGICAL_W;
 const LOGICAL_H = scene.LOGICAL_H;
@@ -146,13 +146,16 @@ window.addEventListener("pointerleave", () => {
 
 // ---- 音频初始化（首次 pointerdown）----
 function ensureAudio() {
-  if (!audio.isInited()) {
-    audio.initAudio();
-  }
+  // 每次有效交互都允许重试；部分移动浏览器第一次会解锁 AudioContext，
+  // 第二次才允许 HTMLAudioElement 开始播放。
+  audio.initAudio();
 }
 
 // 触屏兜底：某些浏览器 touchstart 早于 pointerdown 分发
 document.addEventListener("touchstart", ensureAudio, { passive: true });
+// 点击药柜等 DOM 控件也属于有效的首次交互，不应只有画布操作才启动音乐。
+document.addEventListener("pointerdown", ensureAudio, { passive: true });
+document.addEventListener("click", ensureAudio, { passive: true });
 
 muteBtn.addEventListener("click", () => {
   ensureAudio();
