@@ -7,13 +7,13 @@
 //   ART.cupBack(ctx)          — 杯外沿环 + 空杯底色（贴纸化平涂 + 软投影），锚点 CUP 圆心
 //   ART.cupFront(ctx)         — 杯内沿一两条细高光弧（画在水面之上）
 //   ART.kettle(ctx, x, y, lean) — 俯视壶（平涂+软投影），lean 为注水时的轻微倾侧；返回壶嘴世界坐标
-//   ART.grain(ctx)            — 全画面纸纹颗粒层，每帧最后叠加（低透明度）
+//   ART.grain(ctx)            — 全画面纸纹颗粒层，叠在纸面上（低透明度）
 // 未来把某个函数体换成 ctx.drawImage(img, ...) 即可换成图片素材——
 // 保持锚点与标注尺寸一致，其余代码无需改动。
 // 杯的分层顺序（由 main.js 编排）：cupBack → 水色/扩散(water.js) → 杯中草药
 // → 水面涟漪(water.js) → cupFront → … → grain 收尾。
 // ─────────────────────────────────────────────────────────────────────
-import { TRAY_CENTER, TRAY_RX, TRAY_RY } from "./herbs.js";
+import { TRAY_CENTER, TRAY_RX, TRAY_RY } from "./herbs.js?v=mobile-cabinet-1";
 import { CUP, cupInnerR } from "./water.js";
 
 export const LOGICAL_W = 750;

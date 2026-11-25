@@ -24,15 +24,17 @@ html, body {
   position: relative;
   width: 100%;
   height: 100%;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: none;
-  touch-action: none; /* 手机上拖拽不触发页面滚动/缩放 */
 }
 
 #scene {
   display: block;
+  width: 100%;
+  height: 100%;
   background: var(--paper);
   touch-action: none;
 }
@@ -117,21 +119,45 @@ html, body {
   right: 20px;
   top: 20px;
   z-index: 30;
-  width: 112px;
-  padding: 11px 13px 10px;
-  border: 1px solid rgba(74, 84, 76, 0.18);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 56px;
+  padding: 5px 6px 4px;
+  border: 1px solid #746049;
   border-radius: 4px;
-  color: var(--ink);
-  background: rgba(247, 241, 226, 0.82);
-  box-shadow: 0 7px 24px rgba(74, 62, 42, 0.09);
-  backdrop-filter: blur(8px);
+  color: #f5eee0;
+  background: linear-gradient(#8c7457, #6f5842);
+  box-shadow: inset 0 1px #a89070, 0 2px 0 #514232, 0 4px 9px #51423232;
+  line-height: 1.1;
   font-family: inherit;
+  font-size: 12px;
   cursor: pointer;
 }
 
-#cabinet-btn span, #cabinet-btn small { display: block; }
-#cabinet-btn span { font-size: 16px; letter-spacing: 3px; }
-#cabinet-btn small { margin-top: 4px; font-size: 10px; opacity: .55; letter-spacing: 1px; }
+#cabinet-btn:active { transform: translateY(1px); }
+.cabinet-drawers {
+  display: grid;
+  width: 38px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+}
+.cabinet-drawers i {
+  display: grid;
+  place-items: center;
+  height: 10px;
+  border: 1px solid #594634;
+  border-radius: 2px;
+  background: linear-gradient(#b09570, #93744f);
+}
+.cabinet-drawers i::after {
+  content: "";
+  width: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: #534233;
+  box-shadow: 0 1px #c7ad85;
+}
 
 #formula-hud {
   position: fixed;
@@ -162,8 +188,10 @@ html, body {
   right: 0;
   width: min(440px, 92vw);
   height: 100%;
+  height: 100dvh;
   padding: 28px 28px 36px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   color: #3d4a3e;
   background: #eee7d9;
   background-image: linear-gradient(rgba(126,102,70,.035) 1px, transparent 1px);
@@ -178,7 +206,7 @@ html, body {
 .cabinet-head { display: flex; justify-content: space-between; align-items: flex-start; }
 .cabinet-head small { opacity: .5; letter-spacing: 2px; }
 .cabinet-head h2 { margin: 5px 0 0; font-size: 24px; font-weight: 400; letter-spacing: 3px; }
-#cabinet-close { border: 0; color: inherit; background: none; font: 29px/1 serif; opacity: .48; cursor: pointer; }
+#cabinet-close { min-width: 44px; min-height: 44px; border: 0; color: inherit; background: none; font: 29px/1 serif; opacity: .48; cursor: pointer; }
 .cabinet-intro { margin: 18px 0 16px; font-size: 12px; line-height: 1.7; opacity: .62; }
 #cabinet-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
 .cabinet-herb { position: relative; min-height: 80px; padding: 12px 13px; border: 1px solid rgba(104,88,64,.12); border-radius: 5px; color: inherit; text-align: left; background: rgba(250,247,238,.48); font-family: inherit; cursor: pointer; transition: .2s ease; }
@@ -189,18 +217,18 @@ html, body {
 .cabinet-herb em { position: absolute; top: 9px; right: 10px; font: normal 10px inherit; opacity: .45; }
 .cabinet-rule { height: 1px; margin: 24px 0 18px; background: rgba(90,73,50,.16); }
 .recipe-heading { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; letter-spacing: 2px; }
-.recipe-heading small { font-size: 10px; opacity: .45; }
+.recipe-heading small { font-size: 13px; color: #58624f; letter-spacing: 0; }
 #recipe-list { display: grid; gap: 8px; }
-.recipe-card { padding: 11px 13px; border: 0; border-radius: 4px; color: inherit; text-align: left; background: rgba(183,162,126,.12); font-family: inherit; cursor: pointer; }
-.recipe-card strong { font-weight: 400; letter-spacing: 2px; }
-.recipe-card span, .recipe-card small { display: block; margin-top: 4px; font-size: 11px; opacity: .58; }
+.recipe-card { padding: 14px; border: 0; border-radius: 4px; color: inherit; text-align: left; background: rgba(183,162,126,.12); font-family: inherit; cursor: pointer; }
+.recipe-card strong { font-size: 18px; font-weight: 600; letter-spacing: 2px; }
+.recipe-card span, .recipe-card small { display: block; margin-top: 5px; font-size: 14px; line-height: 1.5; color: #505649; }
 .medical-note { margin: 24px 0 0; padding-top: 14px; border-top: 1px solid rgba(90,73,50,.14); font-size: 10px; line-height: 1.65; opacity: .5; }
 #cabinet-scrim { position: fixed; z-index: 50; inset: 0; background: rgba(52,48,39,.16); opacity: 0; pointer-events: none; transition: opacity .4s; }
 #cabinet-scrim.open { opacity: 1; pointer-events: auto; }
 
 @media (max-width: 620px) {
-  #cabinet-btn { right: 12px; top: 12px; width: 92px; }
-  #formula-hud { left: 12px; top: 12px; width: calc(100vw - 128px); padding: 9px 11px; }
+  #cabinet-btn { right: 12px; top: 12px; }
+  #formula-hud { left: 12px; top: 12px; width: min(290px, calc(100vw - 96px)); padding: 9px 11px; }
   #formula-message { display: none; }
   #herb-cabinet { width: 94vw; padding: 24px 20px 32px; }
 }
