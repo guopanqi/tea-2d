@@ -1,16 +1,16 @@
 // main.js — 启动、resize、指针事件路由、主循环
 //
 // 渲染顺序（正俯视分层，见 scene.js / water.js 顶部注释）：
-//   ART.table → ART.tray → 盘中草药 → ART.cupBack(杯环+空杯底)
+//   ART.table + ART.grain → ART.tray → 盘中草药 → ART.cupBack(杯环+空杯底)
 //   → drawCupWater(水色圆+茶色扩散) → 杯中漂浮草药 → drawCupSurfaceFx(涟漪/水珠)
-//   → 水面微光(steam) → ART.cupFront(高光弧) → 壶+注水滴 → 拖拽中的草药 → 茶签 → ART.grain
-import * as scene from "./scene.js";
-import { Herb, createTrayHerbs, drawHerb, updateHerb, hitTestHerb, HERB_HIT_RADIUS } from "./herbs.js";
+//   → 水面微光(steam) → ART.cupFront(高光弧) → 壶+注水滴 → 拖拽中的草药 → 茶签
+import * as scene from "./scene.js?v=mobile-cabinet-1";
+import { Herb, createTrayHerbs, drawHerb, updateHerb, hitTestHerb, HERB_HIT_RADIUS } from "./herbs.js?v=mobile-cabinet-1";
 import { WaterSystem, drawCupWater, drawCupSurfaceFx, drawPourStream, vortexEyeR, CUP, cupInnerR } from "./water.js";
 import { SteamSystem } from "./steam.js";
 import { brew, nameTea, HERBS, HERB_ORDER, RECIPE_BOOK, analyzeFormula } from "./brew.js";
 import { TeaLabel } from "./label.js";
-import * as audio from "./audio.js?v=music-1";
+import * as audio from "./audio.js";
 
 const LOGICAL_W = scene.LOGICAL_W;
 const LOGICAL_H = scene.LOGICAL_H;
@@ -34,27 +34,22 @@ const undoHerbBtn = document.getElementById("undo-herb");
 
 let scaleFactor = 1;
 let offsetX = 0, offsetY = 0;
+let backdropScale = 1;
 
 function resize() {
   const dpr = window.devicePixelRatio || 1;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  if (!vw || !vh) return; // 隐藏/未布局时跳过，避免 0 尺寸产生 NaN
-  // fitScale 按 CSS 尺寸对逻辑画布 750×1300 计算
-  scaleFactor = Math.min(vw / LOGICAL_W, vh / LOGICAL_H);
-  const cssW = LOGICAL_W * scaleFactor;
-  const cssH = LOGICAL_H * scaleFactor;
-  offsetX = (vw - cssW) / 2;
-  offsetY = (vh - cssH) / 2;
-  // canvas 铺满整个视口；backing store = CSS 尺寸 × dpr；
-  // 绘制变换一次性带上 fitScale×dpr 与居中偏移 ×dpr（Retina/手机 dpr=2 时内容才能铺满）。
-  canvas.style.width = vw + "px";
-  canvas.style.height = vh + "px";
-  canvas.width = Math.round(vw * dpr);
-  canvas.height = Math.round(vh * dpr);
+  const { width, height } = canvas.getBoundingClientRect();
+  if (!width || !height) return;
+  scaleFactor = Math.min(width / LOGICAL_W, height / LOGICAL_H);
+  offsetX = (width - LOGICAL_W * scaleFactor) / 2;
+  offsetY = (height - LOGICAL_H * scaleFactor) / 2;
+
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  backdropScale = Math.max(canvas.width / LOGICAL_W, canvas.height / LOGICAL_H);
   ctx.setTransform(scaleFactor * dpr, 0, 0, scaleFactor * dpr, offsetX * dpr, offsetY * dpr);
 }
-window.addEventListener("resize", resize);
+new ResizeObserver(resize).observe(canvas);
 resize();
 
 // dpr 变化（外接屏拖动/浏览器缩放）时重建 backing store：
@@ -128,9 +123,10 @@ let lastTime = performance.now();
 
 // ---- 坐标转换 ----
 function toLogical(clientX, clientY) {
+  const { left, top } = canvas.getBoundingClientRect();
   return {
-    x: (clientX - offsetX) / scaleFactor,
-    y: (clientY - offsetY) / scaleFactor,
+    x: (clientX - left - offsetX) / scaleFactor,
+    y: (clientY - top - offsetY) / scaleFactor,
   };
 }
 
@@ -169,10 +165,14 @@ resetBtn.addEventListener("click", () => {
 });
 
 function setCabinetOpen(open) {
+  if (cabinet.classList.contains("open") === open) return;
+  if (!open) cabinetBtn.focus({ preventScroll: true });
+  cabinet.inert = !open;
   cabinet.classList.toggle("open", open);
   cabinetScrim.classList.toggle("open", open);
   cabinet.setAttribute("aria-hidden", String(!open));
   cabinetBtn.setAttribute("aria-expanded", String(open));
+  if (open) cabinetClose.focus({ preventScroll: true });
 }
 
 cabinetBtn.addEventListener("click", () => setCabinetOpen(true));
@@ -181,6 +181,27 @@ cabinetScrim.addEventListener("click", () => setCabinetOpen(false));
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") setCabinetOpen(false);
 });
+
+// 横向手势在抬手后收柜，纵向手势由浏览器处理。
+let cabinetSwipe = null;
+cabinet.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "touch" && e.isPrimary) {
+    cabinetSwipe = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  }
+});
+cabinet.addEventListener("pointercancel", (e) => {
+  if (cabinetSwipe?.id === e.pointerId) cabinetSwipe = null;
+});
+cabinet.addEventListener("pointerup", (e) => {
+  if (cabinetSwipe?.id !== e.pointerId) return;
+  const dx = e.clientX - cabinetSwipe.x;
+  const dy = e.clientY - cabinetSwipe.y;
+  cabinetSwipe = null;
+  if (dx >= 55 && dx > Math.abs(dy) * 1.5) setCabinetOpen(false);
+});
+cabinet.addEventListener("click", (e) => {
+  if (!cabinet.classList.contains("open")) e.stopPropagation();
+}, true);
 
 function rebuildTray() {
   trayHerbs = createTrayHerbs(selectedTrayIds);
@@ -224,8 +245,10 @@ function renderRecipes() {
     const ingredients = Object.entries(recipe.counts).map(([id, n]) => `${HERBS[id].name}×${n}`).join(" · ");
     button.innerHTML = `<strong>${recipe.name}</strong><span>${ingredients}</span><small>${recipe.note}</small>`;
     button.addEventListener("click", () => {
+      if (draggingHerb) return;
       selectedTrayIds = Object.keys(recipe.counts);
       rebuildTray();
+      setCabinetOpen(false);
     });
     recipeList.appendChild(button);
   }
@@ -756,12 +779,14 @@ function finishSteep() {
 }
 
 function render() {
-  // 清整个 backing store（canvas 铺满视口，留边区域也要清，避免拖拽出界留下残影）
+  // 纸面铺满屏幕，茶具和命中区域仍共享同一个等比坐标系。
   ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.restore();
+  ctx.setTransform(backdropScale, 0, 0, backdropScale,
+    (canvas.width - LOGICAL_W * backdropScale) / 2,
+    (canvas.height - LOGICAL_H * backdropScale) / 2);
   scene.ART.table(ctx);
+  scene.ART.grain(ctx);
+  ctx.restore();
   scene.ART.tray(ctx);
 
   // 盘中草药
@@ -794,7 +819,6 @@ function render() {
 
   label.draw(ctx); // 茶签与杯并排
 
-  scene.ART.grain(ctx); // 纸纹颗粒层收尾
 }
 
 requestAnimationFrame(frame);

@@ -318,15 +318,15 @@ export function drawHerb(ctx, herb) {
   }
   ctx.restore();
 
-  // 名字标签（盘中常显极淡小字，字距拉大）
+  // 茶盘药名
   if (herb.state === "tray" || herb.state === "hover") {
     ctx.save();
-    ctx.globalAlpha = 0.3 + herb.hoverAmount * 0.45;
-    ctx.font = "14px 'Kaiti SC', STKaiti, KaiTi, serif";
+    ctx.globalAlpha = 0.86 + herb.hoverAmount * 0.14;
+    ctx.font = "26px 'Kaiti SC', STKaiti, KaiTi, serif";
     if ("letterSpacing" in ctx) ctx.letterSpacing = "4px";
     ctx.fillStyle = "#4a544c";
     ctx.textAlign = "center";
-    ctx.fillText(herb.def.name, herb.x + 2, herb.y + 52);
+    ctx.fillText(herb.def.name, herb.x + 2, herb.y + 54);
     ctx.restore();
   }
 

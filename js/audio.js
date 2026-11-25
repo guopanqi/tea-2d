@@ -139,7 +139,7 @@ export function playPickup() {
   const gain = ctx.createGain();
   const t = now();
   gain.gain.setValueAtTime(0, t);
-  gain.gain.linearRampToValueAtTime(0.18, t + 0.005);
+  gain.gain.linearRampToValueAtTime(0.10, t + 0.005);
   gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
   src.connect(filter);
   filter.connect(gain);
@@ -168,7 +168,7 @@ export function playHerbTick(herbId) {
   const gain = ctx.createGain();
   const t = now();
   gain.gain.setValueAtTime(0.001, t);
-  gain.gain.linearRampToValueAtTime(0.15, t + 0.004);
+  gain.gain.linearRampToValueAtTime(0.08, t + 0.004);
   gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
   src.connect(filter);
   filter.connect(gain);
@@ -186,7 +186,7 @@ export function playSplash() {
   osc.frequency.setValueAtTime(400, t);
   osc.frequency.exponentialRampToValueAtTime(150, t + 0.02);
   const oscGain = ctx.createGain();
-  oscGain.gain.setValueAtTime(0.35, t);
+  oscGain.gain.setValueAtTime(0.19, t);
   oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
   osc.connect(oscGain);
   oscGain.connect(masterGain);
@@ -200,7 +200,7 @@ export function playSplash() {
   filter.type = "lowpass";
   filter.frequency.value = 1000;
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.12, t + 0.01);
+  gain.gain.setValueAtTime(0.065, t + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
   src.connect(filter);
   filter.connect(gain);
