@@ -9,11 +9,11 @@
 项目使用原生 ES Module，需要通过 HTTP 静态服务器访问。运行下面的命令会启动服务器并自动打开浏览器：
 
 ```bash
-cd /Users/usr/Documents/play/tea-2d
+cd tea-2d
 ./run
 ```
 
-默认端口是 `8080`，也可以用 `./run 3000` 指定端口。脚本依赖 macOS 已自带的 Python 3。
+默认端口是 `8080`，也可以用 `./run 3000` 指定端口。脚本需要 Python 3。也可在项目根目录运行 `python3 -m http.server 8080`（Windows 可使用 `py -3 -m http.server 8080`）。
 
 电脑浏览器打开：
 
@@ -74,3 +74,7 @@ http://localhost:8080
 ```
 
 项目不依赖 npm 包，也不需要后端服务。部署时可直接发布到任意静态网站托管服务。
+
+## 协作
+
+修改前阅读 [AGENTS.md](AGENTS.md) 与 [STYLE.md](STYLE.md)。从 main 新建任务分支，预览后提交 PR，审阅通过再合并。main 合并后自动部署线上。
