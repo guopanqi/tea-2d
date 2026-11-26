@@ -5,17 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>tea-2d-demo</title>
 <link rel="stylesheet" href="style.css?v=mobile-cabinet-1">
-<link rel="stylesheet" href="daily.css?v=5-compact-note">
+<link rel="stylesheet" href="daily.css?v=6-quiet-note">
 </head>
 <body>
 <audio id="background-music" src="assets/background-music.mp3" loop preload="auto" aria-hidden="true"></audio>
 <div id="stage">
-  <header id="tea-toolbar"><div class="tea-status">  <section id="daily-water" aria-label="每日饮水"></section>  <section id="formula-hud" aria-live="polite">
-    <div class="hud-heading"><span>此刻方笺</span><button id="undo-herb" type="button">退一味</button></div>
-    <div id="formula-summary">杯中尚清</div>
-    <div id="formula-chips"></div>
-    <div id="formula-message">将草木投入杯中，配伍会在这里显现。</div>
-  </section></div><nav class="tea-tools" aria-label="茶盘工具">  <button id="constitution-btn" type="button" aria-haspopup="dialog"><span aria-hidden="true">◇</span>体质辨识</button>  <button id="cabinet-btn" type="button" aria-expanded="false" aria-controls="herb-cabinet"><span class="cabinet-drawers" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>百草柜</span></button></nav></header>
+  <header id="tea-toolbar"><div class="tea-status">  <section id="daily-water" aria-label="每日饮水"></section>  <details id="formula-hud">
+    <summary class="formula-toggle"><span class="formula-kicker">此刻方笺</span><span id="formula-summary" aria-live="polite">杯中尚清</span><span class="formula-chevron" aria-hidden="true">⌄</span></summary>
+    <div class="formula-detail">
+      <div class="hud-heading"><span>当前配伍</span><button id="undo-herb" type="button">退一味</button></div>
+      <div id="formula-chips"></div>
+      <div id="formula-message">将草木投入杯中，配伍会在这里显现。</div>
+    </div>
+  </details></div><nav class="tea-tools" aria-label="茶盘工具">  <button id="constitution-btn" type="button" aria-haspopup="dialog"><span aria-hidden="true">◇</span>体质辨识</button>  <button id="cabinet-btn" type="button" aria-expanded="false" aria-controls="herb-cabinet"><span class="cabinet-drawers" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>百草柜</span></button></nav></header>
   <canvas id="scene"></canvas>
   <div id="cursor-dot"></div>
   <button id="mute-btn" title="静音" aria-label="静音">♪</button>
@@ -47,6 +49,6 @@
   <div id="cabinet-scrim"></div>
 </div>
 <script type="module" src="js/main.js?v=mobile-cabinet-1"></script>
-<script type="module" src="js/daily.js?v=4-two-cups"></script>
+<script type="module" src="js/daily.js?v=6-quiet-note"></script>
 </body>
 </html>

@@ -18,3 +18,7 @@ document.querySelector('#constitution-close').addEventListener('click',()=>panel
 panel.addEventListener('close',clear);
 input.addEventListener('change',()=>{const file=input.files[0];if(!file)return;if(url)URL.revokeObjectURL(url);url='';preview.hidden=true;placeholder.hidden=false;analyze.disabled=true;result.textContent='';if(!file.type.startsWith('image/')||file.size>15*1024*1024){result.textContent='请选择 15 MB 以内的图片。';return}url=URL.createObjectURL(file);preview.onload=()=>{preview.hidden=false;placeholder.hidden=true;analyze.disabled=false};preview.onerror=()=>{result.textContent='无法读取图片，请尝试 JPEG 或 PNG。'};preview.src=url});
 analyze.addEventListener('click',()=>{result.innerHTML='<div class="mock-report"><small>演示结果 · 非真实分析</small><h3>体质倾向：平和（示例）</h3><p>舌象观察：淡红舌、薄白苔（示例数据，与上传照片无关）。</p><h4>今日饮水建议</h4><p>温白水，少量多次；按口渴与活动情况调整。</p><p>此处为界面演示，照片未上传，不构成体质判断或医疗建议。</p></div>';});
+
+const note=document.querySelector('#formula-hud');
+document.addEventListener('pointerdown',e=>{if(note.open&&!note.contains(e.target))note.open=false});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&note.open){note.open=false;note.querySelector('summary').focus()}});
