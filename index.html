@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>tea-2d-demo</title>
 <link rel="stylesheet" href="style.css?v=mobile-cabinet-1">
+<link rel="stylesheet" href="daily.css?v=1">
 </head>
 <body>
 <audio id="background-music" src="assets/background-music.mp3" loop preload="auto" aria-hidden="true"></audio>
@@ -14,6 +15,16 @@
   <button id="mute-btn" title="静音" aria-label="静音">♪</button>
   <div id="reset-btn">再沏一盏</div>
   <button id="cabinet-btn" type="button" aria-expanded="false" aria-controls="herb-cabinet"><span class="cabinet-drawers" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>百草柜</span></button>
+  <section id="daily-water" aria-label="每日饮水"></section>
+  <button id="constitution-btn" type="button" aria-haspopup="dialog"><span aria-hidden="true">◇</span>体质辨识</button>
+  <dialog id="constitution-panel" aria-labelledby="constitution-title">
+    <header><h2 id="constitution-title">体质辨识</h2><button id="constitution-close" type="button" aria-label="关闭">×</button></header>
+    <p>自然光下拍摄舌象，不使用滤镜。</p>
+    <label id="tongue-upload"><img id="tongue-preview" alt="舌象预览" hidden><span id="tongue-placeholder">＋<small>拍摄或上传舌象</small></span><input id="tongue-file" type="file" accept="image/*" capture="environment"></label>
+    <p>单张舌象不能可靠辨识体质或诊断疾病。照片默认仅在本机预览。</p>
+    <button id="tongue-analyze" type="button" disabled>开始分析</button>
+    <div id="tongue-result" role="status"></div>
+  </dialog>
   <section id="formula-hud" aria-live="polite">
     <div class="hud-heading"><span>此刻方笺</span><button id="undo-herb" type="button">退一味</button></div>
     <div id="formula-summary">杯中尚清</div>
@@ -35,5 +46,6 @@
   <div id="cabinet-scrim"></div>
 </div>
 <script type="module" src="js/main.js?v=mobile-cabinet-1"></script>
+<script type="module" src="js/daily.js?v=1"></script>
 </body>
 </html>
