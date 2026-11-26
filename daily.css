@@ -1,0 +1,26 @@
+#daily-water{position:fixed;z-index:25;top:20px;left:20px;color:var(--ink);cursor:default;width: min(272px,calc(100vw - 104px));}
+.water-heading{display:flex;justify-content:space-between;font-size:12px;letter-spacing:1px;align-items:center}
+.water-cups{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:2px}
+.water-cup{border:0;background:none;padding:5px 2px;min-height:44px;cursor:pointer;color:#30362f;display:grid;place-items:center}
+.water-cup svg{width:100%;max-width:24px;height:30px;display:block}
+#formula-hud{top:91px}
+#constitution-btn{position:fixed;right:20px;top:20px;z-index:30;display:grid;justify-items:center;gap:2px;width:56px;min-height:44px;padding:4px;border:1px solid #746049;border-radius:4px;color:#f5eee0;background:linear-gradient(#8c7457,#6f5842);box-shadow:inset 0 1px #a89070,0 2px #514232;font:12px inherit; font-family:inherit;font-size:12px;cursor:pointer}
+#constitution-btn span{font-size:19px;line-height:1}
+#cabinet-btn{top:78px}
+#constitution-panel{width:min(390px,92vw);max-height:90dvh;overflow:auto;border:1px solid #b9ad98;border-radius:5px;background:var(--paper);color:var(--ink);padding:22px;cursor:default;box-shadow:0 12px 44px #51423233}
+#constitution-panel::backdrop{background:#34302755}
+#constitution-panel header{display:flex;align-items:center;justify-content:space-between}
+#constitution-panel h2{margin:0;font-weight:400;letter-spacing:2px}
+#constitution-panel p,#tongue-result{font-size:13px;line-height:1.65}
+#constitution-close{border:0;background:none;font:26px serif;color:inherit;min-width:44px;min-height:44px;cursor:pointer}
+#tongue-upload{position:relative;display:grid;place-items:center;min-height:170px;border:1px dashed #b9ad98;border-radius:4px;overflow:hidden;cursor:pointer}
+#tongue-upload input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+#tongue-upload:focus-within{outline:2px solid var(--ink)}
+#tongue-placeholder{text-align:center;font-size:30px}
+#tongue-placeholder small{display:block;font-size:14px}
+#tongue-preview{max-width:100%;max-height:240px;object-fit:contain}
+#tongue-analyze{width:100%;min-height:44px;background:#e8e0d1;border:1px solid #b9ad98;border-radius:4px;color:var(--ink);font-family:inherit;font-size:15px}
+#tongue-analyze:disabled{opacity:.55}
+@media(max-width:620px){#daily-water{top:12px;left:12px}#formula-hud{top:82px}#constitution-btn{right:12px;top:12px}#cabinet-btn{top:68px}}
+
+.mock-report{margin-top:16px;padding:14px;border-left:2px solid #8d9d8c;background:#e8e0d166}.mock-report small{color:#746049}.mock-report h3,.mock-report h4{margin:10px 0 4px;font-weight:500}.mock-report p{margin:5px 0 10px}
