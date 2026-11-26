@@ -24,3 +24,20 @@
 @media(max-width:620px){#daily-water{top:12px;left:12px}#formula-hud{top:82px}#constitution-btn{right:12px;top:12px}#cabinet-btn{top:68px}}
 
 .mock-report{margin-top:16px;padding:14px;border-left:2px solid #8d9d8c;background:#e8e0d166}.mock-report small{color:#746049}.mock-report h3,.mock-report h4{margin:10px 0 4px;font-weight:500}.mock-report p{margin:5px 0 10px}
+
+/* Toolbar participates in layout; canvas never sits underneath it. */
+#stage{display:grid;grid-template-rows:auto minmax(0,1fr);grid-template-columns:minmax(0,1fr);align-items:stretch;justify-content:stretch;background:#e8e2d6}
+#tea-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:12px 20px 6px;cursor:default;min-width:0;z-index:30}
+.tea-status{min-width:0;flex:1;max-width:290px;display:grid;gap:4px}
+.tea-tools{display:flex;flex-direction:column;align-items:stretch;gap:8px;flex:none;width:76px}
+#daily-water,#formula-hud,#constitution-btn,#cabinet-btn{position:static;inset:auto;width:100%;min-width:0}
+#constitution-btn,#cabinet-btn{white-space:nowrap;min-height:44px;padding:5px 4px;line-height:1.1;font-size:12px}
+#constitution-btn{font-family:inherit}
+#formula-hud{padding:6px 9px;max-height:104px;overflow:auto;pointer-events:auto;background:transparent}
+#formula-summary{margin-top:3px}
+#formula-chips:empty{display:none}
+#formula-message{margin-top:4px}
+#scene{min-height:0;min-width:0;grid-row:2}
+.water-cup:focus:not(:focus-visible),#constitution-btn:focus:not(:focus-visible),#cabinet-btn:focus:not(:focus-visible){outline:none}
+@media(max-width:620px){#tea-toolbar{padding:10px 12px 4px;gap:10px}.tea-tools{width:70px;gap:7px}#formula-hud{max-height:80px}.water-cup{padding:3px 1px;min-height:36px}.water-cup svg{height:25px}}
+@media(max-height:500px) and (orientation:landscape){#tea-toolbar{padding:4px 12px;gap:8px}.tea-tools{flex-direction:row;width:auto}.tea-tools button{width:76px!important}#formula-hud{max-height:54px}.water-cup{min-height:30px}.water-cup svg{height:22px}#formula-message{display:none}}
