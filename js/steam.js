@@ -1,6 +1,6 @@
 // steam.js — 正俯视下的"热气"：水面微光 + 一缕缓慢飘过的半透明雾纹
 // 接口与旧版一致（reset/setActive/update(dt, cx, cy)/draw），main.js 无需改动调用方式。
-import { cupInnerR } from "./water.js";
+import { cupInnerR } from "./water.js?v=layout-20261126-7";
 
 export class SteamSystem {
   constructor() {

@@ -13,7 +13,7 @@ import * as audio from "./audio.js";
 
 export const CUP = {
   x: 375, // 圆心（出签让位时由 main.js 左移）
-  y: 560, // 画面中心偏上
+  y: 660, // 画面中心稍偏下
   r: 260, // 杯口外半径
   wall: 26, // 杯壁厚度（外沿环宽）
 };

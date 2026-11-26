@@ -3,7 +3,7 @@
 // 重新开始冲泡（投新草药/再次注水/再沏一盏）时茶签向右淡出飘走。
 // 自适应：按内容量伸缩茶签高度；各列内容强制不越过内边框，超长截断（加"…"）。
 import * as audio from "./audio.js";
-import { CUP } from "./water.js";
+import { CUP } from "./water.js?v=layout-20261126-7";
 
 const LABEL_W = 140; // 竖屏 750 宽度有限，签身收窄
 const MIN_H = 300;

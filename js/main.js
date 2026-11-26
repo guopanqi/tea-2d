@@ -4,12 +4,12 @@
 //   ART.table + ART.grain → ART.tray → 盘中草药 → ART.cupBack(杯环+空杯底)
 //   → drawCupWater(水色圆+茶色扩散) → 杯中漂浮草药 → drawCupSurfaceFx(涟漪/水珠)
 //   → 水面微光(steam) → ART.cupFront(高光弧) → 壶+注水滴 → 拖拽中的草药 → 茶签
-import * as scene from "./scene.js?v=mobile-cabinet-1";
-import { Herb, createTrayHerbs, drawHerb, updateHerb, hitTestHerb, HERB_HIT_RADIUS } from "./herbs.js?v=mobile-cabinet-1";
-import { WaterSystem, drawCupWater, drawCupSurfaceFx, drawPourStream, vortexEyeR, CUP, cupInnerR } from "./water.js";
-import { SteamSystem } from "./steam.js";
+import * as scene from "./scene.js?v=layout-20261126-7";
+import { Herb, createTrayHerbs, drawHerb, updateHerb, hitTestHerb, HERB_HIT_RADIUS } from "./herbs.js?v=layout-20261126-7";
+import { WaterSystem, drawCupWater, drawCupSurfaceFx, drawPourStream, vortexEyeR, CUP, cupInnerR } from "./water.js?v=layout-20261126-7";
+import { SteamSystem } from "./steam.js?v=layout-20261126-7";
 import { brew, nameTea, HERBS, HERB_ORDER, RECIPE_BOOK, analyzeFormula } from "./brew.js";
-import { TeaLabel } from "./label.js";
+import { TeaLabel } from "./label.js?v=layout-20261126-7";
 import * as audio from "./audio.js";
 
 const LOGICAL_W = scene.LOGICAL_W;

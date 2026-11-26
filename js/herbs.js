@@ -10,10 +10,10 @@
 // 贴纸软投影由 drawHerb 统一画，造型函数只画本体。
 // ─────────────────────────────────────────────────────────────────────
 import { HERBS } from "./brew.js";
-import { CUP, cupInnerR } from "./water.js";
+import { CUP, cupInnerR } from "./water.js?v=layout-20261126-7";
 
 // 场景坐标（逻辑坐标 750x1300，底部一排）
-export const TRAY_CENTER = { x: 375, y: 1105 };
+export const TRAY_CENTER = { x: 375, y: 1133 };
 export const TRAY_RX = 330;
 export const TRAY_RY = 62;
 

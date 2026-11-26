@@ -13,14 +13,14 @@
 // 杯的分层顺序（由 main.js 编排）：cupBack → 水色/扩散(water.js) → 杯中草药
 // → 水面涟漪(water.js) → cupFront → … → grain 收尾。
 // ─────────────────────────────────────────────────────────────────────
-import { TRAY_CENTER, TRAY_RX, TRAY_RY } from "./herbs.js?v=mobile-cabinet-1";
-import { CUP, cupInnerR } from "./water.js";
+import { TRAY_CENTER, TRAY_RX, TRAY_RY } from "./herbs.js?v=layout-20261126-7";
+import { CUP, cupInnerR } from "./water.js?v=layout-20261126-7";
 
 export const LOGICAL_W = 750;
 export const LOGICAL_H = 1300;
 
-export const KETTLE_HOME = { x: 590, y: 220 };
-export const SPOON_HOME = { x: 668, y: 356, rot: -0.5 }; // 茶具角：壶旁斜放的茶匙
+export const KETTLE_HOME = { x: 625, y: 350 };
+export const SPOON_HOME = { x: 668, y: 450, rot: -0.5 }; // 茶具角：壶旁斜放的茶匙
 
 // 调色板（STYLE.md：米灰底 + 低饱和主色 + 食物色只给草药茶汤 + 朱红点缀）
 const PALETTE = {
