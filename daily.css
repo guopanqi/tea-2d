@@ -25,33 +25,31 @@
 
 .mock-report{margin-top:16px;padding:14px;border-left:2px solid #8d9d8c;background:#e8e0d166}.mock-report small{color:#746049}.mock-report h3,.mock-report h4{margin:10px 0 4px;font-weight:500}.mock-report p{margin:5px 0 10px}
 
-/* Toolbar participates in layout; canvas never sits underneath it. */
-#stage{display:grid;grid-template-rows:auto minmax(0,1fr);grid-template-columns:minmax(0,1fr);align-items:stretch;justify-content:stretch;background:#e8e2d6}
-#tea-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:12px 20px 6px;cursor:default;min-width:0;z-index:30}
-.tea-status{min-width:0;flex:1;max-width:290px;display:grid;gap:4px}
-.tea-tools{display:flex;flex-direction:column;align-items:stretch;gap:8px;flex:none;width:76px}
-#daily-water,#formula-hud,#constitution-btn,#cabinet-btn{position:static;inset:auto;width:100%;min-width:0}
-#constitution-btn,#cabinet-btn{white-space:nowrap;min-height:44px;padding:5px 4px;line-height:1.1;font-size:12px}
-#constitution-btn{font-family:inherit}
-#formula-hud{padding:6px 9px;max-height:104px;overflow:auto;pointer-events:auto;background:transparent}
-#formula-summary{margin-top:3px}
-#formula-chips:empty{display:none}
-#formula-message{margin-top:4px}
-#scene{min-height:0;min-width:0;grid-row:2}
-.water-cup:focus:not(:focus-visible),#constitution-btn:focus:not(:focus-visible),#cabinet-btn:focus:not(:focus-visible){outline:none}
-@media(max-width:620px){#tea-toolbar{padding:10px 12px 4px;gap:10px}.tea-tools{width:70px;gap:7px}#formula-hud{max-height:80px}.water-cup{padding:3px 1px;min-height:36px}.water-cup svg{height:25px}}
-@media(max-height:500px) and (orientation:landscape){#tea-toolbar{padding:4px 12px;gap:8px}.tea-tools{flex-direction:row;width:auto}.tea-tools button{width:76px!important}#formula-hud{max-height:54px}.water-cup{min-height:30px}.water-cup svg{height:22px}#formula-message{display:none}}
 
-/* Vertical hydration rail: reserve its own column, rather than overlaying the canvas. */
-#stage{grid-template-columns:64px minmax(0,1fr) 96px;grid-template-rows:auto minmax(0,1fr);column-gap:0}
+/* Independent corner controls: the original full-viewport canvas stays centered. */
+#stage{display:block;position:relative;background:var(--paper)}
+#scene{position:absolute;inset:0;width:100%;height:100%}
 #tea-toolbar,.tea-status{display:contents}
-#daily-water{grid-column:1;grid-row:1 / 3;align-self:start;width:100%;padding:12px 4px 0 12px;z-index:25}
-.water-heading{flex-direction:column;align-items:center;gap:3px;font-size:11px;letter-spacing:0;text-align:center;line-height:1.25}
-.water-cups{grid-template-columns:minmax(0,1fr);gap:0;margin-top:4px}
-.water-cup{width:100%;height:clamp(25px,7dvh,44px);min-height:0;padding:2px 3px}
-.water-cup svg{width:24px;height:clamp(20px,5.5dvh,30px)}
-#formula-hud{grid-column:2;grid-row:1;align-self:start;margin:12px 0 4px;max-width:290px;z-index:18;min-width:0}
-.tea-tools{grid-column:3;grid-row:1;align-self:start;justify-self:end;width:76px;margin:12px 12px 4px 0;z-index:30}
-#scene{grid-column:2 / 4;grid-row:2;width:100%;height:100%}
-@media(max-width:620px){#stage{grid-template-columns:48px minmax(0,1fr) 82px}#daily-water{padding:10px 2px 0 4px}.water-heading{font-size:10px}.tea-tools{width:70px;margin:10px 8px 4px 0}#formula-hud{margin-top:10px;margin-right:4px;width:calc(100% - 4px)}}
-@media(max-height:500px) and (orientation:landscape){#stage{grid-template-columns:54px minmax(0,1fr) 176px}#daily-water{padding-top:4px}.water-cup{height:clamp(20px,7dvh,34px)}.water-cup svg{height:clamp(16px,5.5dvh,25px)}.tea-tools{width:auto;margin:4px 10px 4px 0}#formula-hud{margin-top:4px}}
+#daily-water{position:absolute;top:14px;left:14px;z-index:25;width:56px;padding:0;display:grid;justify-items:center;gap:3px;cursor:default;user-select:none}
+.water-heading{display:grid;justify-items:center;gap:2px;font-size:11px;line-height:1.2;letter-spacing:0;text-align:center;white-space:nowrap}
+.water-total{font-size:12px;font-variant-numeric:tabular-nums}
+.water-vessel{position:relative;display:block;border:1.4px solid #30362f;border-top:0;border-radius:0 0 2px 2px;overflow:hidden;background:#f5f0e644;box-sizing:border-box}
+.water-large{width:36px;height:65px}
+.water-small{width:23px;height:29px}
+.water-level{position:absolute;left:2px;right:2px;bottom:2px;height:calc((100% - 4px)*var(--level,0));background:#8d9d8c;transition:height .32s ease-in-out}
+.water-ticks{position:absolute;inset:2px;pointer-events:none;background:repeating-linear-gradient(to top,transparent 0 calc(12.5% - 1px),#30362f38 calc(12.5% - 1px) 12.5%)}
+.water-action{display:grid;place-items:center;min-height:44px;width:44px;border:0;background:none;color:var(--ink);padding:5px;cursor:pointer}
+.water-action:disabled{cursor:default}
+.water-action:focus-visible{outline:1px solid var(--ink);outline-offset:1px}
+.water-transfer{position:relative;display:grid;justify-items:center;gap:7px}
+.water-stream{position:absolute;left:50%;bottom:32px;width:3px;height:13px;border-radius:2px;background:#8d9d8c;opacity:0;transform:translateX(-50%);pointer-events:none}
+.water-transfer.pouring .water-stream{animation:water-rise .58s ease-in-out both}
+.water-transfer.pouring .water-small .water-level{transition:height .58s ease-in-out}
+.water-transfer.pouring .water-large .water-level{transition:height .58s ease-in-out}
+@keyframes water-rise{0%{opacity:0;transform:translate(-50%,5px) scaleY(.1)}20%{opacity:.9;transform:translate(-50%,0) scaleY(1)}80%{opacity:.9;transform:translate(-50%,-5px) scaleY(1)}100%{opacity:0;transform:translate(-50%,-8px) scaleY(.1)}}
+.water-hint{font-size:10px;line-height:1.2;white-space:nowrap;opacity:.7}
+#formula-hud{position:absolute;top:14px;left:78px;width:min(290px,calc(100% - 170px));max-height:110px;overflow:auto;padding:6px 9px;z-index:18}
+.tea-tools{position:absolute;top:14px;right:14px;z-index:30;display:flex;flex-direction:column;gap:8px;width:76px;cursor:default}
+#constitution-btn,#cabinet-btn{position:static;inset:auto;width:100%;min-width:0;min-height:44px;white-space:nowrap;font-size:12px;line-height:1.1}
+@media(max-width:620px){#daily-water{left:6px;top:10px;width:48px}.water-large{width:31px;height:55px}#formula-hud{left:60px;top:10px;width:min(290px,calc(100% - 144px));max-height:80px}.tea-tools{right:8px;top:10px;width:70px}}
+@media(prefers-reduced-motion:reduce){.water-level,.water-transfer.pouring .water-level{transition:none}.water-transfer.pouring .water-stream{animation:none}}
