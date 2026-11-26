@@ -5,18 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>tea-2d-demo</title>
 <link rel="stylesheet" href="style.css?v=mobile-cabinet-1">
-<link rel="stylesheet" href="daily.css?v=1">
+<link rel="stylesheet" href="daily.css?v=2">
 </head>
 <body>
 <audio id="background-music" src="assets/background-music.mp3" loop preload="auto" aria-hidden="true"></audio>
 <div id="stage">
+  <header id="tea-toolbar"><div class="tea-status">  <section id="daily-water" aria-label="每日饮水"></section>  <section id="formula-hud" aria-live="polite">
+    <div class="hud-heading"><span>此刻方笺</span><button id="undo-herb" type="button">退一味</button></div>
+    <div id="formula-summary">杯中尚清</div>
+    <div id="formula-chips"></div>
+    <div id="formula-message">将草木投入杯中，配伍会在这里显现。</div>
+  </section></div><nav class="tea-tools" aria-label="茶盘工具">  <button id="constitution-btn" type="button" aria-haspopup="dialog"><span aria-hidden="true">◇</span>体质辨识</button>  <button id="cabinet-btn" type="button" aria-expanded="false" aria-controls="herb-cabinet"><span class="cabinet-drawers" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>百草柜</span></button></nav></header>
   <canvas id="scene"></canvas>
   <div id="cursor-dot"></div>
   <button id="mute-btn" title="静音" aria-label="静音">♪</button>
   <div id="reset-btn">再沏一盏</div>
-  <button id="cabinet-btn" type="button" aria-expanded="false" aria-controls="herb-cabinet"><span class="cabinet-drawers" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>百草柜</span></button>
-  <section id="daily-water" aria-label="每日饮水"></section>
-  <button id="constitution-btn" type="button" aria-haspopup="dialog"><span aria-hidden="true">◇</span>体质辨识</button>
+
+
+
   <dialog id="constitution-panel" aria-labelledby="constitution-title">
     <header><h2 id="constitution-title">体质辨识</h2><button id="constitution-close" type="button" aria-label="关闭">×</button></header>
     <p>自然光下拍摄舌象，不使用滤镜。</p>
@@ -25,12 +31,7 @@
     <button id="tongue-analyze" type="button" disabled>开始分析</button>
     <div id="tongue-result" role="status"></div>
   </dialog>
-  <section id="formula-hud" aria-live="polite">
-    <div class="hud-heading"><span>此刻方笺</span><button id="undo-herb" type="button">退一味</button></div>
-    <div id="formula-summary">杯中尚清</div>
-    <div id="formula-chips"></div>
-    <div id="formula-message">将草木投入杯中，配伍会在这里显现。</div>
-  </section>
+
   <aside id="herb-cabinet" aria-hidden="true" inert>
     <div class="cabinet-head">
       <div><small>一盏 · 百草柜</small><h2>择五味置于茶盘</h2></div>
